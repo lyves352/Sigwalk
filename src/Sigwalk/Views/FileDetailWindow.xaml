@@ -2,7 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:Sigwalk.Converters"
-        Title="文件详情"
+        xmlns:loc="clr-namespace:Sigwalk.Localization"
+        Title="{loc:Tr Window.FileDetail.Title}"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}"
+        FontFamily="Microsoft YaHei UI, Segoe UI"
+        FontSize="13"
         Width="1050"
         Height="820"
         MinWidth="820"
@@ -47,25 +52,28 @@
         <TextBlock Text="{Binding FilePath}" Foreground="{DynamicResource SecondaryForegroundBrush}"
                    TextWrapping="Wrap" Margin="0,2,0,0" />
         <WrapPanel Margin="0,8,0,0">
-          <TextBlock Text="签名状态：" Foreground="{DynamicResource SecondaryForegroundBrush}" />
+          <TextBlock Text="{loc:Tr Detail.Header.SignatureStatus}"
+                     Foreground="{DynamicResource SecondaryForegroundBrush}" />
           <TextBlock Text="{Binding SignatureStatusText}" FontWeight="SemiBold" Margin="0,0,18,0" />
-          <TextBlock Text="扫描状态：" Foreground="{DynamicResource SecondaryForegroundBrush}" />
+          <TextBlock Text="{loc:Tr Detail.Header.ScanStatus}"
+                     Foreground="{DynamicResource SecondaryForegroundBrush}" />
           <TextBlock Text="{Binding ScanStatusText}" FontWeight="SemiBold" Margin="0,0,18,0" />
           <TextBlock Text="{Binding SignatureCountText}" Foreground="{DynamicResource SecondaryForegroundBrush}" />
         </WrapPanel>
       </StackPanel>
 
       <StackPanel Grid.Column="1" VerticalAlignment="Top">
-        <Button Content="复制路径" Command="{Binding CopyPathCommand}" MinWidth="110" />
-        <Button Content="复制签名信息" Command="{Binding CopySignatureCommand}" MinWidth="110" />
-        <Button Content="关闭" Style="{StaticResource AccentButtonStyle}" Click="Close_Click"
+        <Button Content="{loc:Tr Detail.Button.CopyPath}" Command="{Binding CopyPathCommand}" MinWidth="110" />
+        <Button Content="{loc:Tr Detail.Button.CopySignature}" Command="{Binding CopySignatureCommand}"
+                MinWidth="110" />
+        <Button Content="{loc:Tr Common.Close}" Style="{StaticResource AccentButtonStyle}" Click="Close_Click"
                 MinWidth="110" Margin="0" IsDefault="True" />
       </StackPanel>
     </Grid>
 
     <TabControl>
 
-      <TabItem Header="基本信息">
+      <TabItem Header="{loc:Tr Detail.Tab.Basic}">
         <Border Background="{DynamicResource PanelBackgroundBrush}" Padding="14">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -83,7 +91,7 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <TextBlock Text="说明：本版本仅检测嵌入式 Authenticode 签名，Windows 目录签名（Catalog）不在检测范围内。"
+              <TextBlock Text="{loc:Tr Detail.CatalogHintLong}"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          TextWrapping="Wrap"
                          Margin="0,14,0,0" />
@@ -92,7 +100,7 @@
         </Border>
       </TabItem>
 
-      <TabItem Header="签名信息">
+      <TabItem Header="{loc:Tr Detail.Tab.Signatures}">
         <Border Background="{DynamicResource PanelBackgroundBrush}" Padding="14">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -109,7 +117,7 @@
                          Margin="0,0,0,8"
                          Visibility="{Binding SignatureError, Converter={StaticResource NotEmptyToVisibility}}" />
 
-              <TextBlock Text="文件没有嵌入式数字签名。"
+              <TextBlock Text="{loc:Tr Detail.NoSignature}"
                          Foreground="{DynamicResource SecondaryForegroundBrush}"
                          FontSize="14"
                          Margin="0,20,0,0"
@@ -144,9 +152,9 @@
 
                         <Grid Margin="0,10,0,0">
                           <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="95" />
+                            <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="95" />
+                            <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="*" />
                           </Grid.ColumnDefinitions>
                           <Grid.RowDefinitions>
@@ -159,56 +167,72 @@
                             <RowDefinition Height="Auto" />
                           </Grid.RowDefinitions>
 
-                          <TextBlock Grid.Row="0" Grid.Column="0" Text="签名者" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Detail.Label.Signer}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Certificate.SubjectName, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
-                          <TextBlock Grid.Row="0" Grid.Column="2" Text="颁发者" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Tr Detail.Label.Issuer}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding Certificate.IssuerName, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
 
-                          <TextBlock Grid.Row="1" Grid.Column="0" Text="证书主体" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr Detail.Label.CertificateSubject}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Certificate.Subject, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
-                          <TextBlock Grid.Row="1" Grid.Column="2" Text="证书颁发者" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Tr Detail.Label.CertificateIssuer}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Certificate.Issuer, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
 
-                          <TextBlock Grid.Row="2" Grid.Column="0" Text="序列号" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr Detail.Label.SerialNumber}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Certificate.SerialNumber, Converter={StaticResource EmptyToDash}}" Style="{StaticResource MonoValueStyle}" />
-                          <TextBlock Grid.Row="2" Grid.Column="2" Text="指纹" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="2" Grid.Column="2" Text="{loc:Tr Detail.Label.Thumbprint}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding Certificate.Thumbprint, Converter={StaticResource EmptyToDash}}" Style="{StaticResource MonoValueStyle}" />
 
-                          <TextBlock Grid.Row="3" Grid.Column="0" Text="有效期" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr Detail.Label.Validity}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Certificate.ValidityText, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
-                          <TextBlock Grid.Row="3" Grid.Column="2" Text="吊销状态" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="3" Grid.Column="2" Text="{loc:Tr Detail.Label.Revocation}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="3" Grid.Column="3" Text="{Binding Certificate.RevocationStatusText, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
 
-                          <TextBlock Grid.Row="4" Grid.Column="0" Text="证书算法" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr Detail.Label.CertificateAlgorithm}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Certificate.SignatureAlgorithm, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
-                          <TextBlock Grid.Row="4" Grid.Column="2" Text="证书链" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="4" Grid.Column="2" Text="{loc:Tr Detail.Label.Chain}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="4" Grid.Column="3" Text="{Binding Certificate.ChainStatusText, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
 
-                          <TextBlock Grid.Row="5" Grid.Column="0" Text="签名算法" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr Detail.Label.SignatureAlgorithm}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SignatureAlgorithm, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
-                          <TextBlock Grid.Row="5" Grid.Column="2" Text="摘要算法" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="5" Grid.Column="2" Text="{loc:Tr Detail.Label.DigestAlgorithm}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="5" Grid.Column="3" Text="{Binding DigestAlgorithm, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
 
-                          <TextBlock Grid.Row="6" Grid.Column="0" Text="时间戳" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr Detail.Label.Timestamp}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource FieldValueStyle}">
                             <Run Text="{Binding Timestamp.Type, Mode=OneWay, TargetNullValue=—, FallbackValue=—}" />
                             <Run Text="  " />
                             <Run Text="{Binding Timestamp.TimestampText, Mode=OneWay, FallbackValue=—}" />
                           </TextBlock>
-                          <TextBlock Grid.Row="6" Grid.Column="2" Text="时间戳签名者" Style="{StaticResource FieldLabelStyle}" />
+                          <TextBlock Grid.Row="6" Grid.Column="2" Text="{loc:Tr Detail.Label.TimestampSigner}"
+                                     Style="{StaticResource FieldLabelStyle}" />
                           <TextBlock Grid.Row="6" Grid.Column="3" Text="{Binding Timestamp.SignerName, Converter={StaticResource EmptyToDash}}" Style="{StaticResource FieldValueStyle}" />
                         </Grid>
 
-                        <TextBlock Text="验证方式" Style="{StaticResource FieldLabelStyle}" Margin="0,6,0,4" />
+                        <TextBlock Text="{loc:Tr Detail.Label.Verification}" Style="{StaticResource FieldLabelStyle}"
+                                   Margin="0,6,0,4" />
                         <Grid>
-                          <TextBlock Text="WinVerifyTrust 系统验证"
+                          <TextBlock Text="{loc:Tr Detail.Label.VerifiedText}"
                                      Visibility="{Binding IsVerified, Converter={StaticResource BoolToVisibility}}" />
-                          <TextBlock Text="仅展示（未单独验证）"
+                          <TextBlock Text="{loc:Tr Detail.Label.DisplayOnly}"
                                      Foreground="{DynamicResource WarningBrush}"
                                      Visibility="{Binding IsVerified, Converter={StaticResource InverseBoolVisibility}}" />
                         </Grid>
 
-                        <TextBlock Text="证书链" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4" />
+                        <TextBlock Text="{loc:Tr Detail.Label.Chain}" Style="{StaticResource FieldLabelStyle}"
+                                   Margin="0,10,0,4" />
                         <ItemsControl ItemsSource="{Binding Chain}">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -237,26 +261,26 @@
         </Border>
       </TabItem>
 
-      <TabItem Header="哈希">
+      <TabItem Header="{loc:Tr Detail.Tab.Hash}">
         <Border Background="{DynamicResource PanelBackgroundBrush}" Padding="16">
           <StackPanel>
             <TextBlock Text="SHA1" FontWeight="SemiBold" Margin="0,0,0,4" />
             <DockPanel Margin="0,0,0,18">
-              <Button DockPanel.Dock="Right" Content="复制 SHA1" Command="{Binding CopySha1Command}"
-                      Margin="8,0,0,0" />
+              <Button DockPanel.Dock="Right" Content="{loc:Tr Detail.Button.CopySha1}"
+                      Command="{Binding CopySha1Command}" Margin="8,0,0,0" />
               <TextBox Text="{Binding Sha1Text, Mode=OneWay}" IsReadOnly="True"
                        FontFamily="Consolas, Cascadia Mono, Courier New" TextWrapping="Wrap" />
             </DockPanel>
 
             <TextBlock Text="SHA256" FontWeight="SemiBold" Margin="0,0,0,4" />
             <DockPanel>
-              <Button DockPanel.Dock="Right" Content="复制 SHA256" Command="{Binding CopySha256Command}"
-                      Margin="8,0,0,0" />
+              <Button DockPanel.Dock="Right" Content="{loc:Tr Detail.Button.CopySha256}"
+                      Command="{Binding CopySha256Command}" Margin="8,0,0,0" />
               <TextBox Text="{Binding Sha256Text, Mode=OneWay}" IsReadOnly="True"
                        FontFamily="Consolas, Cascadia Mono, Courier New" TextWrapping="Wrap" />
             </DockPanel>
 
-            <TextBlock Text="哈希值统一使用大写十六进制格式。"
+            <TextBlock Text="{loc:Tr Detail.Hash.Uppercase}"
                        Foreground="{DynamicResource MutedForegroundBrush}"
                        Margin="0,18,0,0" />
           </StackPanel>

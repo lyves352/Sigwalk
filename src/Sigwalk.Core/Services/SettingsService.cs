@@ -41,9 +41,16 @@ public sealed class SettingsService
                     return new AppSettings();
                 }
 
-                var json = File.ReadAllText(SettingsPath);
+                // 兼容手工编辑/其他工具写入的 UTF-8 BOM。
+                var json = File.ReadAllText(SettingsPath).TrimStart((char)0xFEFF);
                 var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-                return settings ?? new AppSettings();
+                if (settings is null)
+                {
+                    return new AppSettings();
+                }
+
+                settings.HiddenColumns ??= new List<string>();
+                return settings;
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {

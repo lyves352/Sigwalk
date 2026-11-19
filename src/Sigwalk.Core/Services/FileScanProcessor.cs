@@ -1,3 +1,4 @@
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 using Sigwalk.Core.Models;
 using Sigwalk.Core.Services.Signature;
@@ -43,7 +44,7 @@ public sealed class FileScanProcessor : IFileScanProcessor
             var before = new FileInfo(path);
             if (!before.Exists)
             {
-                return FileScanResult.CreateFailed(path, "文件不存在");
+                return FileScanResult.CreateFailed(path, Loc.T("Error.FileNotFound"));
             }
 
             var size = before.Length;
@@ -53,7 +54,10 @@ public sealed class FileScanProcessor : IFileScanProcessor
             {
                 return FileScanResult.CreateFailed(
                     path,
-                    $"文件过大：{FileSizeFormatter.Format(size)}，超过限制 {FileSizeFormatter.Format(options.MaxFileSizeBytes)}");
+                    Loc.F(
+                        "Error.FileTooLarge",
+                        FileSizeFormatter.Format(size),
+                        FileSizeFormatter.Format(options.MaxFileSizeBytes)));
             }
 
             // 可读性探测：被独占占用/无权限的文件在此失败，而不是产生错误的签名结论。
@@ -104,14 +108,18 @@ public sealed class FileScanProcessor : IFileScanProcessor
             var after = new FileInfo(path);
             if (!after.Exists)
             {
-                return FileScanResult.CreateFailed(path, "文件在扫描期间被删除", signatureChecked, hashChecked);
+                return FileScanResult.CreateFailed(
+                    path,
+                    Loc.T("Error.DeletedDuringScan"),
+                    signatureChecked,
+                    hashChecked);
             }
 
             if (after.Length != size || after.LastWriteTimeUtc != lastWriteTime)
             {
                 return FileScanResult.CreateFailed(
                     path,
-                    "文件在扫描期间发生变化，结果已丢弃",
+                    Loc.T("Error.ChangedDuringScan"),
                     signatureChecked,
                     hashChecked);
             }

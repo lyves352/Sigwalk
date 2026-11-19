@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
+using Sigwalk.Cli;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 using Sigwalk.Core.Services;
 using Sigwalk.Services;
@@ -12,6 +14,7 @@ public partial class App : Application
 {
     private FileLogService? _log;
     private MainViewModel? _mainViewModel;
+    private ThemeService? _themeService;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -24,9 +27,19 @@ public partial class App : Application
 
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
+        _log.Info($"加载配置：主题={settings.Theme}，语言={settings.Language}，路径={settingsService.SettingsPath}");
 
-        var themeService = new ThemeService();
-        themeService.Apply(settings.Theme);
+        if (e.Args.Length > 0)
+        {
+            RunCommandLine(e.Args);
+            return;
+        }
+
+        Loc.SetLanguage(settings.Language);
+
+        _themeService = new ThemeService();
+        _themeService.EffectiveThemeChanged += (_, _) => WindowThemeHelper.ApplyAll();
+        _themeService.Apply(settings.Theme);
 
         var dialogService = new DialogService(_log);
         var clipboardService = new ClipboardService();
@@ -37,7 +50,7 @@ public partial class App : Application
             clipboardService,
             settingsService,
             _log,
-            themeService,
+            _themeService,
             settings);
 
         var window = new MainWindow { DataContext = _mainViewModel };
@@ -46,9 +59,24 @@ public partial class App : Application
         _log.Info("Sigwalk 启动");
     }
 
+    private void RunCommandLine(string[] args)
+    {
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        ConsoleHost.Ensure();
+
+        // 整个 CLI 在无同步上下文的线程池线程上运行，避免阻塞 WPF Dispatcher 造成死锁。
+        var exitCode = Task.Run(() => new CliRunner(_log!).RunAsync(args))
+            .GetAwaiter()
+            .GetResult();
+
+        _log?.Info($"命令行模式退出，退出码 {exitCode}");
+        Shutdown(exitCode);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         _mainViewModel?.OnApplicationExit();
+        _themeService?.Dispose();
         _log?.Info("Sigwalk 退出");
         base.OnExit(e);
     }
@@ -57,7 +85,7 @@ public partial class App : Application
     {
         _log?.Error("未处理的界面异常", e.Exception);
         MessageBox.Show(
-            $"发生未处理的异常：\n{e.Exception.Message}\n\n详细信息已写入日志。",
+            Loc.F("Dialog.Message.Unhandled", e.Exception.Message),
             "Sigwalk",
             MessageBoxButton.OK,
             MessageBoxImage.Error);

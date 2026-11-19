@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 
 namespace Sigwalk.Services;
@@ -20,23 +21,23 @@ public sealed class FileOpenService
     {
         if (!File.Exists(path))
         {
-            _dialog.ShowWarning($"文件不存在：{path}");
+            _dialog.ShowWarning(Loc.F("Error.FileNotFoundDetail", path));
             return;
         }
 
-        Start(new ProcessStartInfo(path) { UseShellExecute = true }, "无法打开文件");
+        Start(new ProcessStartInfo(path) { UseShellExecute = true }, Loc.T("Error.OpenFile"));
     }
 
     public void OpenFolder(string path)
     {
         if (!Directory.Exists(path))
         {
-            _dialog.ShowWarning($"目录不存在：{path}");
+            _dialog.ShowWarning(Loc.F("Error.DirectoryNotFoundDetail", path));
             return;
         }
 
         Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = $"\"{path}\"" },
-            "无法打开目录");
+            Loc.T("Error.OpenDirectory"));
     }
 
     /// <summary>使用 Explorer 的 /select 参数定位文件。</summary>
@@ -44,7 +45,7 @@ public sealed class FileOpenService
     {
         if (!File.Exists(path))
         {
-            _dialog.ShowWarning($"文件不存在：{path}");
+            _dialog.ShowWarning(Loc.F("Error.FileNotFoundDetail", path));
             return;
         }
 
@@ -52,7 +53,7 @@ public sealed class FileOpenService
         {
             UseShellExecute = true,
             Arguments = $"/select,\"{path}\"",
-        }, "无法在资源管理器中定位文件");
+        }, Loc.T("Error.RevealInExplorer"));
     }
 
     public void OpenLogFolder(string path)
@@ -61,12 +62,12 @@ public sealed class FileOpenService
         {
             Directory.CreateDirectory(path);
             Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = $"\"{path}\"" },
-                "无法打开日志目录");
+                Loc.T("Error.OpenLogFolder"));
         }
         catch (Exception ex)
         {
             _log.Error("打开日志目录失败", ex);
-            _dialog.ShowError($"无法打开日志目录：{ex.Message}");
+            _dialog.ShowError(Loc.F("Error.OpenLogFolderDetail", ex.Message));
         }
     }
 
@@ -79,7 +80,7 @@ public sealed class FileOpenService
         catch (Exception ex)
         {
             _log.Error($"{errorMessage}：{startInfo.FileName}", ex);
-            _dialog.ShowError($"{errorMessage}：{ex.Message}");
+            _dialog.ShowError(Loc.F("Error.ActionFailed", errorMessage, ex.Message));
         }
     }
 }

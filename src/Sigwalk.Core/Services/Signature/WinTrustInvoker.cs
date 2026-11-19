@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Sigwalk.Core.Interop;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
 
 namespace Sigwalk.Core.Services.Signature;
@@ -234,7 +235,7 @@ internal sealed unsafe class WinTrustInvoker
             {
                 Timestamp = time,
                 Signer = signerCertificate,
-                Type = isRfc3161 ? "RFC3161" : "旧式时间戳",
+                Type = isRfc3161 ? "RFC3161" : Loc.T("Signature.Timestamp.Legacy"),
             };
 
             if (isRfc3161)

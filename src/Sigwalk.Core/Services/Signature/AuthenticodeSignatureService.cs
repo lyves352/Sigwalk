@@ -1,4 +1,5 @@
 using Sigwalk.Core.Interop;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 using Sigwalk.Core.Models;
 using Sigwalk.Core.Utilities;
@@ -38,7 +39,7 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
             return new SignatureVerificationResult
             {
                 Status = SignatureStatus.Unknown,
-                ErrorMessage = "文件不存在",
+                ErrorMessage = Loc.T("Error.FileNotFound"),
             };
         }
 
@@ -64,7 +65,7 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
             return new SignatureVerificationResult
             {
                 Status = SignatureStatus.Unknown,
-                ErrorMessage = $"签名验证发生异常：{ex.Message}",
+                ErrorMessage = Loc.F("Signature.Error.Exception", ex.Message),
                 HasEmbeddedSignature = hasEmbedded,
             };
         }
@@ -105,7 +106,9 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _log.Warn($"验证第 {index + 1} 个签名失败：{filePath} - {ex.Message}");
-                var exceptionMapping = new SignatureMapping(SignatureOutcome.Unknown, $"签名验证异常：{ex.Message}");
+                var exceptionMapping = new SignatureMapping(
+                    SignatureOutcome.Unknown,
+                    Loc.F("Signature.Error.Exception", ex.Message));
                 mappings.Add((index, exceptionMapping));
                 signatures.Add(CreateSignatureInfo(index, null, SignatureStatus.Unknown, exceptionMapping, 0));
                 continue;
@@ -116,7 +119,10 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
             {
                 mapping = new SignatureMapping(
                     SignatureOutcome.Unknown,
-                    $"第 {index + 1} 个签名无法验证（{Win32ErrorCodes.Format(call.Status)}）");
+                    Loc.F(
+                        "Signature.Error.IndexUnverified",
+                        index + 1,
+                        Win32ErrorCodes.Format(call.Status)));
             }
 
             var status = mapping.Outcome switch
@@ -184,7 +190,11 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
 
             if (failed.Count > 0)
             {
-                warning = $"多重签名中第 {string.Join("、", failed.Select(f => f.Index + 1))} 个签名未通过验证";
+                warning = Loc.F(
+                    "Signature.Warning.MultiFailed",
+                    string.Join(
+                        Loc.T("Signature.ListSeparator"),
+                        failed.Select(f => f.Index + 1)));
             }
 
             var revocationWarnings = mappings
@@ -195,12 +205,14 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
 
             if (revocationWarnings.Count > 0)
             {
-                warning = AppendWarning(warning, string.Join("；", revocationWarnings));
+                warning = AppendWarning(
+                    warning,
+                    string.Join(Loc.T("Signature.WarningSeparator"), revocationWarnings));
             }
 
             if (signatures.Count > 0 && signatures.All(s => s.Certificate is null))
             {
-                warning = AppendWarning(warning, "系统验证通过，但未能读取签名证书信息。");
+                warning = AppendWarning(warning, Loc.T("Signature.Warning.CertificateMissing"));
             }
 
             return (SignatureStatus.Valid, null, warning);
@@ -214,7 +226,7 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
 
         var unknownMessage = mappings
             .Select(m => m.Mapping.Message)
-            .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m)) ?? "无法确定签名状态";
+            .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m)) ?? Loc.T("Signature.Error.Unknown");
         return (SignatureStatus.Unknown, unknownMessage, null);
     }
 
@@ -228,7 +240,7 @@ public sealed class AuthenticodeSignatureService : ISignatureVerifier
         var warning = mapping.Warning;
         if (status == SignatureStatus.Valid && extracted?.Certificate is null)
         {
-            warning = AppendWarning(warning, "未能读取该签名的证书信息。");
+            warning = AppendWarning(warning, Loc.T("Signature.Warning.SignatureCertificateMissing"));
         }
 
         return new SignatureInfo

@@ -3,15 +3,25 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Sigwalk.Core.Localization;
+using Sigwalk.Helpers;
+using Sigwalk.Services;
 using Sigwalk.ViewModels;
 
 namespace Sigwalk.Views;
 
 public partial class MainWindow : Window
 {
+    private MainViewModel? _subscribedViewModel;
+
     public MainWindow()
     {
         InitializeComponent();
+        Closed += Window_Closed;
+        SourceInitialized += (_, _) => WindowThemeHelper.Apply(this);
+        // WPF 在首次布局/激活后可能重置非客户区，需要在渲染完成与每次激活时重新应用。
+        ContentRendered += (_, _) => WindowThemeHelper.Apply(this);
+        Activated += (_, _) => WindowThemeHelper.Apply(this);
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
@@ -23,6 +33,52 @@ public partial class MainWindow : Window
         {
             menu.DataContext = ViewModel;
         }
+
+        WindowThemeHelper.Apply(this);
+        ApplyColumnVisibility();
+
+        if (ViewModel is { } viewModel)
+        {
+            viewModel.ColumnVisibilityChanged += ViewModel_ColumnVisibilityChanged;
+            _subscribedViewModel = viewModel;
+        }
+    }
+
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        if (_subscribedViewModel is not null)
+        {
+            _subscribedViewModel.ColumnVisibilityChanged -= ViewModel_ColumnVisibilityChanged;
+            _subscribedViewModel = null;
+        }
+    }
+
+    private void ViewModel_ColumnVisibilityChanged(object? sender, EventArgs e) => ApplyColumnVisibility();
+
+    private void ApplyColumnVisibility()
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        foreach (var column in FilesGrid.Columns)
+        {
+            var key = ColumnKey.GetKey(column);
+            if (string.IsNullOrEmpty(key))
+            {
+                continue;
+            }
+
+            column.Visibility = viewModel.IsColumnVisible(key)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        // 隐藏列后仍冻结前三个可见列，避免冻结计数超出可见列数。
+        var visible = FilesGrid.Columns.Count(column => column.Visibility == Visibility.Visible);
+        FilesGrid.FrozenColumnCount = Math.Min(3, visible);
     }
 
     private void FilesGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -74,8 +130,8 @@ public partial class MainWindow : Window
 
         var result = MessageBox.Show(
             this,
-            "扫描正在进行，退出将取消扫描。是否退出？",
-            "退出 Sigwalk",
+            Loc.T("Status.Close.Confirm"),
+            Loc.T("App.Title"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
 
@@ -126,7 +182,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>列标题右键菜单：显示/隐藏指定列（纯视图行为）。</summary>
+    /// <summary>列标题右键菜单：显示/隐藏指定列，并写回持久化设置。</summary>
     private void ColumnHeader_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var menu = new ContextMenu
@@ -137,19 +193,28 @@ public partial class MainWindow : Window
 
         foreach (var column in FilesGrid.Columns)
         {
-            var target = column;
+            var key = ColumnKey.GetKey(column);
             var item = new MenuItem
             {
-                Header = column.Header?.ToString() ?? "列",
+                Header = !string.IsNullOrEmpty(key)
+                    ? Loc.T("Column." + key)
+                    : column.Header?.ToString() ?? Loc.T("Settings.ColumnsSection"),
                 IsCheckable = true,
                 IsChecked = column.Visibility == Visibility.Visible,
                 StaysOpenOnClick = true,
             };
             item.Click += (_, _) =>
             {
-                target.Visibility = target.Visibility == Visibility.Visible
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
+                if (!string.IsNullOrEmpty(key) && ViewModel is { } viewModel)
+                {
+                    viewModel.SetColumnVisible(key, !viewModel.IsColumnVisible(key));
+                }
+                else
+                {
+                    column.Visibility = column.Visibility == Visibility.Visible
+                        ? Visibility.Collapsed
+                        : Visibility.Visible;
+                }
             };
             menu.Items.Add(item);
         }

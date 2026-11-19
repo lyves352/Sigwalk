@@ -1,6 +1,8 @@
+using Sigwalk.Core.Localization;
+
 namespace Sigwalk.Core.Utilities;
 
-/// <summary>将常见文件异常转换为用户可读的中文说明。</summary>
+/// <summary>将常见文件异常转换为当前语言的用户可读说明。</summary>
 public static class ErrorText
 {
     public static string Describe(Exception exception)
@@ -8,16 +10,16 @@ public static class ErrorText
         var message = exception.Message.Trim();
         return exception switch
         {
-            FileNotFoundException => "文件不存在" + Suffix(message),
-            DirectoryNotFoundException => "目录不存在" + Suffix(message),
-            UnauthorizedAccessException => "没有读取权限" + Suffix(message),
-            PathTooLongException => "文件路径过长" + Suffix(message),
-            System.Security.SecurityException => "安全策略拒绝访问" + Suffix(message),
-            IOException => "文件读取失败" + Suffix(message),
+            FileNotFoundException => Loc.T("Error.FileNotFound") + Suffix(message),
+            DirectoryNotFoundException => Loc.T("Error.DirectoryNotFound") + Suffix(message),
+            UnauthorizedAccessException => Loc.T("Error.AccessDenied") + Suffix(message),
+            PathTooLongException => Loc.T("Error.PathTooLong") + Suffix(message),
+            System.Security.SecurityException => Loc.T("Error.SecurityDenied") + Suffix(message),
+            IOException => Loc.T("Error.ReadFailed") + Suffix(message),
             _ => message.Length == 0 ? exception.GetType().Name : $"{exception.GetType().Name}: {message}",
         };
     }
 
     private static string Suffix(string message) =>
-        string.IsNullOrWhiteSpace(message) ? string.Empty : $"（{message}）";
+        string.IsNullOrWhiteSpace(message) ? string.Empty : Loc.F("Error.Detail", message);
 }

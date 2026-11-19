@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 using Sigwalk.Core.Models;
 using Sigwalk.Core.Services;
@@ -27,6 +28,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly ThemeService _themeService;
     private readonly ScanCoordinator _coordinator;
     private readonly FileDiscoveryService _discovery = new();
+    private readonly ScanInputTracker _inputTracker = new();
     private readonly PathRegistry _registry = new();
     private readonly ExportService _exporter = new();
     private readonly ResultSerializer _serializer = new();
@@ -39,12 +41,12 @@ public sealed class MainViewModel : ViewModelBase
     private FileFilter _filter = new();
     private ScanSession? _session;
     private CancellationTokenSource? _scanCts;
+    private IReadOnlyList<FilterOption> _filterOptions;
     private FilterOption _selectedFilter;
     private string _searchText = string.Empty;
-    private string _extensionFilter = string.Empty;
     private bool _isScanning;
-    private bool _isPaused;
-    private string _statusMessage = "就绪";
+    private string _statusKey = "Status.Ready";
+    private object?[] _statusArgs = Array.Empty<object?>();
     private string _currentDirectory = string.Empty;
     private string _currentFile = string.Empty;
     private string _hashProgressText = string.Empty;
@@ -81,6 +83,8 @@ public sealed class MainViewModel : ViewModelBase
         _themeService = themeService;
         _settings = settings;
         _coordinator = new ScanCoordinator(new FileScanProcessor(log: log), log);
+        _filterOptions = BuildFilterOptions();
+        LocalizationService.Current.LanguageChanged += OnLanguageChanged;
 
         Files = new BulkObservableCollection<FileItemViewModel>();
 
@@ -112,9 +116,12 @@ public sealed class MainViewModel : ViewModelBase
 
     public ICollectionView FilesView { get; }
 
-    public IReadOnlyList<FilterOption> FilterOptions { get; } = Enum.GetValues<SignatureFilter>()
-        .Select(value => new FilterOption(value, StatusText.DescribeSignatureFilter(value)))
-        .ToList();
+    public IReadOnlyList<FilterOption> FilterOptions => _filterOptions;
+
+    private static IReadOnlyList<FilterOption> BuildFilterOptions() =>
+        Enum.GetValues<SignatureFilter>()
+            .Select(value => new FilterOption(value, StatusText.DescribeSignatureFilter(value)))
+            .ToList();
 
     public ICommand OpenFilesCommand { get; private set; } = null!;
     public ICommand AddFilesCommand { get; private set; } = null!;
@@ -124,14 +131,16 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand ClearListCommand { get; private set; } = null!;
     public ICommand ExitCommand { get; private set; } = null!;
     public ICommand StartScanCommand { get; private set; } = null!;
-    public ICommand PauseResumeCommand { get; private set; } = null!;
+    public ICommand ScanActionCommand { get; private set; } = null!;
     public ICommand CancelScanCommand { get; private set; } = null!;
     public ICommand RescanSelectedCommand { get; private set; } = null!;
     public ICommand RemoveSelectedCommand { get; private set; } = null!;
     public ICommand SaveResultsCommand { get; private set; } = null!;
     public ICommand LoadResultsCommand { get; private set; } = null!;
-    public ICommand ExportAllCommand { get; private set; } = null!;
+    public ICommand ExportCommand { get; private set; } = null!;
     public ICommand ExportFilteredCommand { get; private set; } = null!;
+    public ICommand SetThemeCommand { get; private set; } = null!;
+    public ICommand SetLanguageCommand { get; private set; } = null!;
     public ICommand CopySelectedCommand { get; private set; } = null!;
     public ICommand CopyPathCommand { get; private set; } = null!;
     public ICommand CopyNameCommand { get; private set; } = null!;
@@ -143,7 +152,6 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand RevealInExplorerCommand { get; private set; } = null!;
     public ICommand ShowDetailsCommand { get; private set; } = null!;
     public ICommand ShowSettingsCommand { get; private set; } = null!;
-    public ICommand ToggleThemeCommand { get; private set; } = null!;
     public ICommand OpenLogFolderCommand { get; private set; } = null!;
     public ICommand ShowAboutCommand { get; private set; } = null!;
     public ICommand ClearFiltersCommand { get; private set; } = null!;
@@ -156,6 +164,7 @@ public sealed class MainViewModel : ViewModelBase
             if (SetProperty(ref _isScanning, value))
             {
                 OnPropertyChanged(nameof(IsIdle));
+                OnPropertyChanged(nameof(ScanActionText));
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -163,26 +172,11 @@ public sealed class MainViewModel : ViewModelBase
 
     public bool IsIdle => !_isScanning;
 
-    public bool IsPaused
-    {
-        get => _isPaused;
-        private set
-        {
-            if (SetProperty(ref _isPaused, value))
-            {
-                OnPropertyChanged(nameof(PauseResumeText));
-                CommandManager.InvalidateRequerySuggested();
-            }
-        }
-    }
+    /// <summary>合并后的扫描按钮文案：空闲开始，扫描中取消。</summary>
+    public string ScanActionText =>
+        Loc.T(_isScanning ? "Menu.Scan.Cancel" : "Menu.Scan.Start");
 
-    public string PauseResumeText => _isPaused ? "继续" : "暂停";
-
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
-    }
+    public string StatusMessage => Loc.F(_statusKey, _statusArgs);
 
     public bool Recursive
     {
@@ -202,8 +196,34 @@ public sealed class MainViewModel : ViewModelBase
 
     public string ScanModeText => StatusText.DescribeScanMode(_settings.ScanMode);
     public string RevocationModeText => StatusText.DescribeRevocationMode(_settings.RevocationMode);
-    public string ThemeText => StatusText.DescribeThemeMode(_settings.Theme);
-    public string ConcurrencyText => $"并发 {Math.Clamp(_settings.MaxConcurrency, 1, 32)}";
+    public string ConcurrencyText =>
+        Loc.F("Filter.Concurrency", Math.Clamp(_settings.MaxConcurrency, 1, 32));
+
+    public string VisibleCountText => Loc.F("Filter.VisibleCount", VisibleCount);
+    public string TotalCountText => Loc.F("StatusBar.Total", TotalCount);
+    public string CompletedCountText => Loc.F("StatusBar.Completed", CompletedCount);
+    public string ValidCountText => Loc.F("StatusBar.Valid", ValidCount);
+    public string UnsignedCountText => Loc.F("StatusBar.Unsigned", UnsignedCount);
+    public string InvalidCountText => Loc.F("StatusBar.Invalid", InvalidCount);
+    public string UnknownCountText => Loc.F("StatusBar.Unknown", UnknownCount);
+    public string FailedCountText => Loc.F("StatusBar.Failed", FailedCount);
+    public string CurrentDirectoryText => string.IsNullOrEmpty(CurrentDirectory)
+        ? string.Empty
+        : Loc.F("StatusBar.Directory", CurrentDirectory);
+    public string CurrentFileText => string.IsNullOrEmpty(CurrentFile)
+        ? string.Empty
+        : Loc.F("StatusBar.File", CurrentFile);
+    public string ElapsedDisplayText => Loc.F("StatusBar.Elapsed", ElapsedText);
+
+    public bool IsAutoTheme => _settings.Theme == ThemeMode.Auto;
+    public bool IsLightTheme => _settings.Theme == ThemeMode.Light;
+    public bool IsDarkTheme => _settings.Theme == ThemeMode.Dark;
+    public bool IsChineseLanguage => Loc.Language == AppLanguage.Chinese;
+    public bool IsEnglishLanguage => Loc.Language == AppLanguage.English;
+
+    public IReadOnlyCollection<string> HiddenColumns => _settings.HiddenColumns;
+
+    public event EventHandler? ColumnVisibilityChanged;
 
     public string SearchText
     {
@@ -211,18 +231,6 @@ public sealed class MainViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _searchText, value))
-            {
-                RestartFilterTimer();
-            }
-        }
-    }
-
-    public string ExtensionFilter
-    {
-        get => _extensionFilter;
-        set
-        {
-            if (SetProperty(ref _extensionFilter, value))
             {
                 RestartFilterTimer();
             }
@@ -247,13 +255,25 @@ public sealed class MainViewModel : ViewModelBase
     public string CurrentDirectory
     {
         get => _currentDirectory;
-        private set => SetProperty(ref _currentDirectory, value);
+        private set
+        {
+            if (SetProperty(ref _currentDirectory, value))
+            {
+                OnPropertyChanged(nameof(CurrentDirectoryText));
+            }
+        }
     }
 
     public string CurrentFile
     {
         get => _currentFile;
-        private set => SetProperty(ref _currentFile, value);
+        private set
+        {
+            if (SetProperty(ref _currentFile, value))
+            {
+                OnPropertyChanged(nameof(CurrentFileText));
+            }
+        }
     }
 
     public string HashProgressText
@@ -265,7 +285,13 @@ public sealed class MainViewModel : ViewModelBase
     public string ElapsedText
     {
         get => _elapsedText;
-        private set => SetProperty(ref _elapsedText, value);
+        private set
+        {
+            if (SetProperty(ref _elapsedText, value))
+            {
+                OnPropertyChanged(nameof(ElapsedDisplayText));
+            }
+        }
     }
 
     public double ProgressValue
@@ -283,7 +309,13 @@ public sealed class MainViewModel : ViewModelBase
     public int VisibleCount
     {
         get => _visibleCount;
-        private set => SetProperty(ref _visibleCount, value);
+        private set
+        {
+            if (SetProperty(ref _visibleCount, value))
+            {
+                OnPropertyChanged(nameof(VisibleCountText));
+            }
+        }
     }
 
     public int TotalCount => _totalCount;
@@ -363,16 +395,19 @@ public sealed class MainViewModel : ViewModelBase
             StartScanAsync,
             () => !IsScanning && Files.Count > 0,
             HandleCommandError);
-        PauseResumeCommand = new RelayCommand(TogglePause, () => IsScanning);
+        ScanActionCommand = new AsyncRelayCommand(
+            ScanActionAsync,
+            () => IsScanning || Files.Count > 0,
+            HandleCommandError);
         CancelScanCommand = new RelayCommand(CancelScan, () => IsScanning);
         RescanSelectedCommand = new AsyncRelayCommand(
             RescanSelectedAsync,
-            () => !IsScanning && HasSelection,
+            () => !IsScanning && Files.Count > 0,
             HandleCommandError);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsScanning && HasSelection);
         SaveResultsCommand = new AsyncRelayCommand(SaveResultsAsync, () => Files.Count > 0, HandleCommandError);
         LoadResultsCommand = new AsyncRelayCommand(LoadResultsAsync, () => !IsScanning, HandleCommandError);
-        ExportAllCommand = new AsyncRelayCommand(
+        ExportCommand = new AsyncRelayCommand(
             () => ExportAsync(filteredOnly: false),
             () => Files.Count > 0,
             HandleCommandError);
@@ -391,7 +426,8 @@ public sealed class MainViewModel : ViewModelBase
         RevealInExplorerCommand = new RelayCommand(RevealInExplorer, () => HasSelection);
         ShowDetailsCommand = new RelayCommand(ShowDetails, () => HasSelection);
         ShowSettingsCommand = new RelayCommand(ShowSettings);
-        ToggleThemeCommand = new RelayCommand(ToggleTheme);
+        SetThemeCommand = new RelayCommand<ThemeMode>(SetTheme);
+        SetLanguageCommand = new RelayCommand<AppLanguage>(SetLanguage);
         OpenLogFolderCommand = new RelayCommand(() => _fileOpen.OpenLogFolder(_log.LogDirectory));
         ShowAboutCommand = new RelayCommand(_dialog.ShowAbout);
         ClearFiltersCommand = new RelayCommand(ClearFilters);
@@ -409,7 +445,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         _filterTimer.Stop();
         _filter.SearchText = _searchText;
-        _filter.ExtensionFilter = _extensionFilter;
         RefreshView();
     }
 
@@ -417,11 +452,9 @@ public sealed class MainViewModel : ViewModelBase
     {
         _filterTimer.Stop();
         _searchText = string.Empty;
-        _extensionFilter = string.Empty;
-        _selectedFilter = FilterOptions[0];
+        _selectedFilter = _filterOptions[0];
         _filter = new FileFilter();
         OnPropertyChanged(nameof(SearchText));
-        OnPropertyChanged(nameof(ExtensionFilter));
         OnPropertyChanged(nameof(SelectedFilter));
         RefreshView();
     }
@@ -469,8 +502,10 @@ public sealed class MainViewModel : ViewModelBase
         var paths = FileDiscoveryService.SplitPastedPaths(text);
         if (paths.Count == 0)
         {
-            StatusMessage = "剪贴板中没有有效路径";
-            _dialog.ShowInfo("剪贴板中没有可识别的文件或目录路径。每行粘贴一个路径。", "粘贴路径");
+            SetStatus("Status.Paste.Empty");
+            _dialog.ShowInfo(
+                Loc.T("Dialog.Message.PasteEmpty"),
+                Loc.T("Dialog.Title.PastePaths"));
             return;
         }
 
@@ -485,30 +520,42 @@ public sealed class MainViewModel : ViewModelBase
             {
                 if (IsScanning)
                 {
-                    _dialog.ShowInfo("扫描进行中，无法清空列表。请先取消扫描。", "打开文件");
+                    _dialog.ShowInfo(Loc.T("Status.Busy.Clear"), Loc.T("Menu.File.OpenFiles"));
                     return;
                 }
 
                 ClearListCore();
             }
 
+            var normalizedInputs = paths
+                .Select(FileDiscoveryService.NormalizeInputPath)
+                .Where(path => !string.IsNullOrEmpty(path))
+                .Select(path => path!)
+                .ToList();
+
             var options = BuildScanOptions();
-            var discovery = await Task.Run(() => _discovery.Discover(paths, options, _registry));
+            var discovery = await Task.Run(
+                () => _discovery.Discover(normalizedInputs, options, _registry));
+            TrackInputs(normalizedInputs);
             var added = AddDiscovered(discovery.Files);
             EnqueueAddedItems(added);
 
             if (discovery.Errors.Count > 0)
             {
-                _dialog.ShowError(FormatIssues("以下路径无法添加：", discovery.Errors), "添加文件");
+                _dialog.ShowError(
+                    FormatIssues(Loc.T("Dialog.Message.PathsFailed"), discovery.Errors),
+                    Loc.T("Dialog.Title.AddFiles"));
             }
             else if (discovery.Warnings.Count > 0)
             {
-                _dialog.ShowWarning(FormatIssues("部分目录无法完整读取：", discovery.Warnings), "扫描提示");
+                _dialog.ShowWarning(
+                    FormatIssues(Loc.T("Dialog.Message.Warnings"), discovery.Warnings),
+                    Loc.T("Dialog.Title.ScanTip"));
             }
 
-            StatusMessage = added.Count == 0
-                ? "没有添加新文件（可能全部重复或不符合过滤条件）"
-                : $"已添加 {added.Count} 个文件";
+            SetStatus(
+                added.Count == 0 ? "Status.Add.None" : "Status.Add.Added",
+                added.Count == 0 ? Array.Empty<object?>() : new object?[] { added.Count });
 
             if (added.Count > 0)
             {
@@ -520,8 +567,8 @@ public sealed class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             _log.Error("添加文件失败", ex);
-            _dialog.ShowError($"添加文件失败：{ex.Message}");
-            StatusMessage = "添加文件失败";
+            _dialog.ShowError(Loc.F("Status.Add.FailedDetail", ex.Message));
+            SetStatus("Status.Add.Failed");
         }
     }
 
@@ -581,6 +628,17 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private async Task ScanActionAsync()
+    {
+        if (IsScanning)
+        {
+            CancelScan();
+            return;
+        }
+
+        await StartScanAsync();
+    }
+
     private async Task StartScanAsync()
     {
         if (IsScanning)
@@ -594,8 +652,10 @@ public sealed class MainViewModel : ViewModelBase
 
         if (targets.Count == 0)
         {
-            StatusMessage = "没有待扫描的文件";
-            _dialog.ShowInfo("没有待扫描的文件。若要重新检测已完成的文件，请选中后使用“重新检测选中”。", "开始扫描");
+            SetStatus("Status.Scan.NoPending");
+            _dialog.ShowInfo(
+                Loc.T("Status.Scan.NoPendingDetail"),
+                Loc.T("Menu.Scan.Start"));
             return;
         }
 
@@ -609,12 +669,64 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var targets = SelectedFiles.ToList();
+        var options = BuildScanOptions();
+        var roots = _inputTracker.Roots.ToList();
+
+        // 已不存在的根不再参与后续枚举，避免每次重检都产生同样的路径错误。
+        foreach (var missing in roots.Where(root => !File.Exists(root) && !Directory.Exists(root)).ToList())
+        {
+            _inputTracker.Remove(missing);
+            roots.Remove(missing);
+        }
+
+        var existingPaths = Files.Select(item => item.FilePath).ToList();
+        var selectedPaths = SelectedFiles.Select(item => item.FilePath).ToList();
+
+        DiscoveryResult? discovery = null;
+        if (roots.Count > 0)
+        {
+            discovery = await Task.Run(() => _discovery.Discover(roots, options));
+        }
+
+        var plan = RescanPlanner.Create(
+            roots,
+            discovery ?? new DiscoveryResult(),
+            existingPaths,
+            selectedPaths);
+
+        if (discovery is { Warnings.Count: > 0 })
+        {
+            _dialog.ShowWarning(
+                FormatIssues(Loc.T("Dialog.Message.Warnings"), discovery.Warnings),
+                Loc.T("Dialog.Title.ScanTip"));
+        }
+
+        var removed = RemoveItemsCore(
+            Files.Where(item => plan.RemovedPaths.Contains(item.FilePath, StringComparer.OrdinalIgnoreCase))
+                .ToList());
+        foreach (var path in plan.AddedPaths)
+        {
+            // 重新枚举时未使用注册表，新增路径需要补登记，避免后续重复添加。
+            _registry.Add(path);
+        }
+
+        var added = AddDiscovered(plan.AddedPaths);
+
+        if (removed > 0 || added.Count > 0)
+        {
+            SetStatus("Status.Rescan.Synced", removed, added.Count);
+        }
+
+        var rescanSet = new HashSet<string>(plan.RescanPaths, StringComparer.OrdinalIgnoreCase);
+        var targets = Files.Where(item => rescanSet.Contains(item.FilePath)).ToList();
         if (targets.Count == 0)
         {
+            SetStatus("Status.Rescan.None");
+            _dialog.ShowInfo(Loc.T("Status.Rescan.None"), Loc.T("Dialog.Title.Rescan"));
             return;
         }
 
+        SetStatus("Status.Rescan.InProgress");
         await RunScanAsync(targets);
     }
 
@@ -626,46 +738,46 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var options = BuildScanOptions();
-        foreach (var item in targets)
-        {
-            item.SetScanning(true);
-        }
-
         _scanCts = new CancellationTokenSource();
-        _session = _coordinator.Start(
-            options,
-            targets.Select(item => new ScanWorkItem(item.Id, item.FilePath)),
-            _scanCts.Token);
-
-        IsScanning = true;
-        IsPaused = false;
-        StatusMessage = "正在扫描…";
         _scanStartedAt = DateTime.UtcNow;
-        ProgressValue = 0;
-        CurrentDirectory = string.Empty;
-        CurrentFile = string.Empty;
-        HashProgressText = string.Empty;
-        ElapsedText = "00:00:00";
-        _uiTimer.Start();
-        _log.Info(
-            $"开始扫描：{targets.Count} 个文件，并发 {options.MaxConcurrency}，" +
-            $"模式 {StatusText.DescribeScanMode(options.ScanMode)}，吊销 {StatusText.DescribeRevocationMode(options.RevocationMode)}");
 
         try
         {
+            foreach (var item in targets)
+            {
+                item.SetScanning(true);
+            }
+
+            _session = _coordinator.Start(
+                options,
+                targets.Select(item => new ScanWorkItem(item.Id, item.FilePath)),
+                _scanCts.Token);
+
+            IsScanning = true;
+            SetStatus("Status.Scan.Starting");
+            ProgressValue = 0;
+            CurrentDirectory = string.Empty;
+            CurrentFile = string.Empty;
+            HashProgressText = string.Empty;
+            ElapsedText = "00:00:00";
+            _uiTimer.Start();
+            _log.Info(
+                $"开始扫描：{targets.Count} 个文件，并发 {options.MaxConcurrency}，" +
+                $"模式 {StatusText.DescribeScanMode(options.ScanMode)}，吊销 {StatusText.DescribeRevocationMode(options.RevocationMode)}");
+
             await _session.WaitForCompletionAsync(_scanCts.Token);
-            StatusMessage = "扫描完成";
+            SetStatus("Status.Scan.Completed");
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "扫描已取消";
+            SetStatus("Status.Scan.Cancelled");
             _log.Info("用户取消扫描");
         }
         catch (Exception ex)
         {
-            StatusMessage = "扫描失败";
+            SetStatus("Status.Scan.Failed");
             _log.Error("扫描失败", ex);
-            _dialog.ShowError($"扫描失败：{ex.Message}");
+            _dialog.ShowError(Loc.F("Status.Scan.FailedDetail", ex.Message));
         }
         finally
         {
@@ -724,7 +836,6 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         IsScanning = false;
-        IsPaused = false;
         ElapsedText = FormatElapsed(elapsed);
         CurrentDirectory = string.Empty;
         CurrentFile = string.Empty;
@@ -760,14 +871,9 @@ public sealed class MainViewModel : ViewModelBase
         CurrentDirectory = progress.CurrentDirectory ?? string.Empty;
         CurrentFile = progress.CurrentFilePath ?? string.Empty;
         HashProgressText = progress.HashProgress is { } hash
-            ? $"{Path.GetFileName(hash.FilePath)}：{hash.Percentage:0}%"
+            ? Loc.F("Status.HashProgressFile", Path.GetFileName(hash.FilePath), hash.Percentage.ToString("0"))
             : string.Empty;
         ElapsedText = FormatElapsed(progress.Elapsed);
-
-        if (progress.IsPaused != IsPaused)
-        {
-            IsPaused = progress.IsPaused;
-        }
     }
 
     private void ApplyResults(IReadOnlyList<ScanItemResult> batch)
@@ -803,27 +909,6 @@ public sealed class MainViewModel : ViewModelBase
         UpdateVisibleCount();
     }
 
-    private void TogglePause()
-    {
-        if (_session is null)
-        {
-            return;
-        }
-
-        if (IsPaused)
-        {
-            _session.Resume();
-            IsPaused = false;
-            StatusMessage = "正在扫描…";
-        }
-        else
-        {
-            _session.Pause();
-            IsPaused = true;
-            StatusMessage = "已暂停";
-        }
-    }
-
     private void CancelScan()
     {
         if (!IsScanning)
@@ -831,7 +916,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        StatusMessage = "正在取消…";
+        SetStatus("Status.Scan.Cancelling");
         _session?.Resume();
         _scanCts?.Cancel();
     }
@@ -840,11 +925,11 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (IsScanning)
         {
-            _dialog.ShowInfo("扫描进行中，无法清空列表。请先取消扫描。", "清空列表");
+            _dialog.ShowInfo(Loc.T("Status.Busy.Clear"), Loc.T("Dialog.Title.ClearList"));
             return;
         }
 
-        if (Files.Count > 0 && !_dialog.Confirm("确定清空当前列表？扫描结果将全部丢失。", "清空列表"))
+        if (Files.Count > 0 && !_dialog.Confirm(Loc.T("Status.Clear.Confirm"), Loc.T("Dialog.Title.ClearList")))
         {
             return;
         }
@@ -855,6 +940,7 @@ public sealed class MainViewModel : ViewModelBase
     private void ClearListCore()
     {
         _registry.Clear();
+        _inputTracker.Clear();
         Files.ReplaceAll(Array.Empty<FileItemViewModel>());
         _itemsById.Clear();
         _selectedFiles.Clear();
@@ -872,7 +958,7 @@ public sealed class MainViewModel : ViewModelBase
         ProgressValue = 0;
         NotifyStatistics();
         FilesView.Refresh();
-        StatusMessage = "列表已清空";
+        SetStatus("Status.Cleared");
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -889,8 +975,18 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
+        var removed = RemoveItemsCore(selected);
+        if (removed > 0)
+        {
+            SetStatus("Status.Removed", removed);
+        }
+    }
+
+    /// <summary>从列表、注册表与统计中移除指定行；返回实际移除数量。</summary>
+    private int RemoveItemsCore(IReadOnlyCollection<FileItemViewModel> candidates)
+    {
         var removed = new List<FileItemViewModel>();
-        foreach (var item in selected)
+        foreach (var item in candidates)
         {
             if (!_itemsById.Remove(item.Id))
             {
@@ -899,23 +995,33 @@ public sealed class MainViewModel : ViewModelBase
 
             removed.Add(item);
             _registry.Remove(item.FilePath);
+            // 显式文件根被移除后不再参与重新枚举；目录根保持不变。
+            _inputTracker.Remove(item.FilePath);
             DecrementStatistics(item.Result);
             _totalCount = Math.Max(0, _totalCount - 1);
         }
 
         if (removed.Count == 0)
         {
-            return;
+            return 0;
         }
 
         Files.RemoveRange(removed);
-        _selectedFiles.Clear();
+        _selectedFiles.RemoveAll(item => !_itemsById.ContainsKey(item.Id));
         NotifySelectionChanged();
         RenumberIndices();
         NotifyStatistics();
         RefreshView();
-        StatusMessage = $"已移除 {removed.Count} 个文件";
         CommandManager.InvalidateRequerySuggested();
+        return removed.Count;
+    }
+
+    private void TrackInputs(IEnumerable<string> normalizedInputs)
+    {
+        var existing = normalizedInputs
+            .Where(path => File.Exists(path) || Directory.Exists(path))
+            .ToList();
+        _inputTracker.AddRange(existing);
     }
 
     private void RenumberIndices()
@@ -930,7 +1036,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (Files.Count == 0)
         {
-            _dialog.ShowInfo("列表为空，没有可保存的结果。", "保存结果");
+            _dialog.ShowInfo(Loc.T("Dialog.Message.SaveEmpty"), Loc.T("Dialog.Title.SaveResults"));
             return;
         }
 
@@ -949,13 +1055,17 @@ public sealed class MainViewModel : ViewModelBase
             await Task.Run(() => _serializer.Save(path, results));
             UpdateLastDirectory(Path.GetDirectoryName(path));
             PersistSettings();
-            StatusMessage = $"已保存 {results.Count} 条结果";
-            _dialog.ShowInfo($"已保存 {results.Count} 条扫描结果。", "保存结果");
+            SetStatus("Status.Results.Saved", results.Count);
+            _dialog.ShowInfo(
+                Loc.F("Dialog.Message.SaveSuccess", results.Count),
+                Loc.T("Dialog.Title.SaveResults"));
         }
         catch (Exception ex)
         {
             _log.Error("保存扫描结果失败", ex);
-            _dialog.ShowError($"保存失败：{ex.Message}", "保存结果");
+            _dialog.ShowError(
+                Loc.F("Dialog.Message.SaveFailed", ex.Message),
+                Loc.T("Dialog.Title.SaveResults"));
         }
     }
 
@@ -963,7 +1073,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (IsScanning)
         {
-            _dialog.ShowInfo("扫描进行中，无法加载结果。", "加载结果");
+            _dialog.ShowInfo(Loc.T("Status.Busy.Import"), Loc.T("Dialog.Title.Import"));
             return;
         }
 
@@ -1003,12 +1113,14 @@ public sealed class MainViewModel : ViewModelBase
             RefreshView();
             UpdateLastDirectory(Path.GetDirectoryName(path));
             PersistSettings();
-            StatusMessage = $"已加载 {loaded.Count} 条扫描结果";
+            SetStatus("Status.Results.Loaded", loaded.Count);
         }
         catch (Exception ex)
         {
             _log.Error("加载扫描结果失败", ex);
-            _dialog.ShowError($"加载失败：{ex.Message}", "加载结果");
+            _dialog.ShowError(
+                Loc.F("Dialog.Message.ImportFailed", ex.Message),
+                Loc.T("Dialog.Title.Import"));
         }
     }
 
@@ -1020,13 +1132,15 @@ public sealed class MainViewModel : ViewModelBase
 
         if (results.Count == 0)
         {
-            _dialog.ShowInfo("没有可导出的结果。", "导出");
+            _dialog.ShowInfo(Loc.T("Dialog.Message.NoExport"), Loc.T("Dialog.Title.Export"));
             return;
         }
 
+        var format = _settings.ExportFormat;
         var path = _dialog.SaveExportFile(
-            $"sigwalk-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
-            _settings.LastDirectory);
+            $"sigwalk-{DateTime.Now:yyyyMMdd-HHmmss}{ExportService.GetExtension(format)}",
+            _settings.LastDirectory,
+            format);
 
         if (string.IsNullOrEmpty(path))
         {
@@ -1035,17 +1149,28 @@ public sealed class MainViewModel : ViewModelBase
 
         try
         {
-            var format = ExportService.DetectFormat(path);
-            await Task.Run(() => _exporter.Export(path, format, results));
+            // 以最终扩展名优先，允许用户在保存对话框中改格式；未知扩展名仍使用设置格式。
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            if (extension is ".csv" or ".json" or ".xlsx")
+            {
+                format = ExportService.DetectFormat(path);
+            }
+
+            var content = _settings.ExportContent;
+            await Task.Run(() => _exporter.Export(path, format, results, content));
             UpdateLastDirectory(Path.GetDirectoryName(path));
             PersistSettings();
-            StatusMessage = $"已导出 {results.Count} 条结果到 {Path.GetFileName(path)}";
-            _dialog.ShowInfo($"已导出 {results.Count} 条结果：\n{path}", "导出完成");
+            SetStatus("Status.Results.Exported", results.Count, Path.GetFileName(path));
+            _dialog.ShowInfo(
+                Loc.F("Dialog.Message.ExportSuccess", results.Count, path),
+                Loc.T("Dialog.Title.ExportDone"));
         }
         catch (Exception ex)
         {
             _log.Error("导出失败", ex);
-            _dialog.ShowError($"导出失败：{ex.Message}", "导出");
+            _dialog.ShowError(
+                Loc.F("Dialog.Message.ExportFailed", ex.Message),
+                Loc.T("Dialog.Title.Export"));
         }
     }
 
@@ -1078,7 +1203,7 @@ public sealed class MainViewModel : ViewModelBase
         var item = SelectedFile;
         if (item is null)
         {
-            StatusMessage = "请先选择文件";
+            SetStatus("Status.SelectFileFirst");
             _log.Warn("查看文件详情：未选择文件");
             return;
         }
@@ -1103,35 +1228,123 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         ApplySettings(updated);
-        StatusMessage = "设置已保存";
+        SetStatus("Status.SettingsSaved");
         _log.Info("设置已保存");
     }
 
     private void ApplySettings(AppSettings updated)
     {
         _settings.Theme = updated.Theme;
+        _settings.Language = updated.Language;
         _settings.Recursive = updated.Recursive;
         _settings.Extensions = updated.Extensions;
         _settings.MaxConcurrency = updated.MaxConcurrency;
         _settings.ScanMode = updated.ScanMode;
         _settings.RevocationMode = updated.RevocationMode;
         _settings.AutoSortAfterScan = updated.AutoSortAfterScan;
+        _settings.ExportFormat = updated.ExportFormat;
+        _settings.ExportContent = updated.ExportContent;
+        _settings.HiddenColumns = new List<string>(updated.HiddenColumns);
+
+        Loc.SetLanguage(_settings.Language);
         _themeService.Apply(_settings.Theme);
         PersistSettings();
+
         OnPropertyChanged(nameof(Recursive));
         OnPropertyChanged(nameof(ScanModeText));
         OnPropertyChanged(nameof(RevocationModeText));
-        OnPropertyChanged(nameof(ThemeText));
         OnPropertyChanged(nameof(ConcurrencyText));
+        OnPropertyChanged(nameof(IsAutoTheme));
+        OnPropertyChanged(nameof(IsLightTheme));
+        OnPropertyChanged(nameof(IsDarkTheme));
+        OnPropertyChanged(nameof(IsChineseLanguage));
+        OnPropertyChanged(nameof(IsEnglishLanguage));
+        ColumnVisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ToggleTheme()
+    private void SetTheme(ThemeMode theme)
     {
-        _settings.Theme = _settings.Theme == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;
-        _themeService.Apply(_settings.Theme);
+        if (_settings.Theme == theme)
+        {
+            return;
+        }
+
+        _settings.Theme = theme;
+        _themeService.Apply(theme);
         PersistSettings();
-        OnPropertyChanged(nameof(ThemeText));
-        StatusMessage = $"已切换到{StatusText.DescribeThemeMode(_settings.Theme)}主题";
+        OnPropertyChanged(nameof(IsAutoTheme));
+        OnPropertyChanged(nameof(IsLightTheme));
+        OnPropertyChanged(nameof(IsDarkTheme));
+        SetStatus("Status.Theme.Changed", StatusText.DescribeThemeMode(theme));
+    }
+
+    private void SetLanguage(AppLanguage language)
+    {
+        if (_settings.Language == language)
+        {
+            return;
+        }
+
+        _settings.Language = language;
+        Loc.SetLanguage(language);
+        PersistSettings();
+        SetStatus("Status.Language.Changed");
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        _filterOptions = BuildFilterOptions();
+        _selectedFilter = _filterOptions.FirstOrDefault(option => option.Value == _filter.StatusFilter)
+                          ?? _filterOptions[0];
+
+        OnPropertyChanged(nameof(FilterOptions));
+        OnPropertyChanged(nameof(SelectedFilter));
+        OnPropertyChanged(nameof(ScanModeText));
+        OnPropertyChanged(nameof(RevocationModeText));
+        OnPropertyChanged(nameof(ConcurrencyText));
+        OnPropertyChanged(nameof(ScanActionText));
+        OnPropertyChanged(nameof(StatusMessage));
+        OnPropertyChanged(nameof(CurrentDirectoryText));
+        OnPropertyChanged(nameof(CurrentFileText));
+        OnPropertyChanged(nameof(ElapsedDisplayText));
+        OnPropertyChanged(nameof(HashProgressText));
+        OnPropertyChanged(nameof(IsChineseLanguage));
+        OnPropertyChanged(nameof(IsEnglishLanguage));
+        NotifyStatistics();
+        UpdateVisibleCount();
+        // UpdateVisibleCount 在数值未变化时不会触发通知，语言切换需要显式刷新。
+        OnPropertyChanged(nameof(VisibleCountText));
+
+        foreach (var item in _itemsById.Values)
+        {
+            item.RefreshLocalization();
+        }
+
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    public bool IsColumnVisible(string key) =>
+        !_settings.HiddenColumns.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    public void SetColumnVisible(string key, bool visible)
+    {
+        var hidden = _settings.HiddenColumns;
+        var contains = hidden.Contains(key, StringComparer.OrdinalIgnoreCase);
+        if (visible && contains)
+        {
+            hidden.RemoveAll(item => string.Equals(item, key, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (!visible && !contains)
+        {
+            hidden.Add(key);
+        }
+        else
+        {
+            return;
+        }
+
+        PersistSettings();
+        ColumnVisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void CopySelected(Func<FileItemViewModel, string?> selector)
@@ -1147,14 +1360,9 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        if (_clipboard.TrySetText(string.Join(Environment.NewLine, values)))
-        {
-            StatusMessage = "已复制到剪贴板";
-        }
-        else
-        {
-            StatusMessage = "复制失败：剪贴板被占用";
-        }
+        SetStatus(_clipboard.TrySetText(string.Join(Environment.NewLine, values))
+            ? "Status.Clipboard.Copied"
+            : "Status.Clipboard.Failed");
     }
 
     private void CopySelectedRows()
@@ -1165,7 +1373,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine("文件名称\t文件路径\t文件大小\t文件类型\t修改时间\t签名状态\t签名者\t证书颁发者\tSHA1\tSHA256\t扫描状态");
+        builder.AppendLine(Loc.T("Copy.Header.Row"));
         foreach (var item in SelectedFiles)
         {
             builder.AppendLine(string.Join(
@@ -1185,7 +1393,7 @@ public sealed class MainViewModel : ViewModelBase
 
         if (_clipboard.TrySetText(builder.ToString()))
         {
-            StatusMessage = $"已复制 {SelectedFiles.Count} 行";
+            SetStatus("Status.Clipboard.Rows", SelectedFiles.Count);
         }
     }
 
@@ -1201,13 +1409,16 @@ public sealed class MainViewModel : ViewModelBase
         foreach (var signature in item.Result.Signatures)
         {
             builder.AppendLine(
-                $"{signature.DisplayName}\t状态={signature.StatusText}\t签名者={signature.SignerName}\t" +
-                $"颁发者={signature.IssuerName}\t有效期={signature.ValidityText}\t" +
-                $"算法={signature.SignatureAlgorithm}/{signature.DigestAlgorithm}\t" +
-                $"时间戳签名者={signature.Timestamp?.SignerName}\t时间戳时间={signature.Timestamp?.TimestampText}");
+                $"{signature.DisplayName}\t{Loc.T("Copy.Label.Status")}={signature.StatusText}\t" +
+                $"{Loc.T("Copy.Label.Signer")}={signature.SignerName}\t" +
+                $"{Loc.T("Copy.Label.Issuer")}={signature.IssuerName}\t" +
+                $"{Loc.T("Copy.Label.Validity")}={signature.ValidityText}\t" +
+                $"{Loc.T("Copy.Label.Algorithm")}={signature.SignatureAlgorithm}/{signature.DigestAlgorithm}\t" +
+                $"{Loc.T("Copy.Label.TimestampSigner")}={signature.Timestamp?.SignerName}\t" +
+                $"{Loc.T("Copy.Label.TimestampTime")}={signature.Timestamp?.TimestampText}");
             if (!string.IsNullOrWhiteSpace(signature.ErrorMessage))
             {
-                builder.AppendLine($"  错误：{signature.ErrorMessage}");
+                builder.AppendLine($"  {Loc.T("Copy.Label.Error")}: {signature.ErrorMessage}");
             }
         }
 
@@ -1258,10 +1469,17 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        OnPropertyChanged(nameof(StatusMessage));
+    }
+
     private void HandleCommandError(Exception exception)
     {
         _log.Error("命令执行失败", exception);
-        _dialog.ShowError($"操作失败：{exception.Message}");
+        _dialog.ShowError(Loc.F("Status.OperationFailed", exception.Message));
     }
 
     private void NotifyStatistics()
@@ -1274,6 +1492,13 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(InvalidCount));
         OnPropertyChanged(nameof(UnknownCount));
         OnPropertyChanged(nameof(FailedCount));
+        OnPropertyChanged(nameof(TotalCountText));
+        OnPropertyChanged(nameof(CompletedCountText));
+        OnPropertyChanged(nameof(ValidCountText));
+        OnPropertyChanged(nameof(UnsignedCountText));
+        OnPropertyChanged(nameof(InvalidCountText));
+        OnPropertyChanged(nameof(UnknownCountText));
+        OnPropertyChanged(nameof(FailedCountText));
     }
 
     private void RecomputeStatistics()
@@ -1394,7 +1619,7 @@ public sealed class MainViewModel : ViewModelBase
 
         if (issues.Count > maxLines)
         {
-            builder.AppendLine($"… 其余 {issues.Count - maxLines} 条已写入日志");
+            builder.AppendLine(Loc.F("Status.IssuesMore", issues.Count - maxLines));
         }
 
         return builder.ToString();

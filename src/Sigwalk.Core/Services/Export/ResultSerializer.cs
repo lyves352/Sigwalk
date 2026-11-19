@@ -2,11 +2,12 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
 
 namespace Sigwalk.Core.Services.Export;
 
-/// <summary>扫描结果的 JSON 文档格式，同时用于导出、保存和加载。</summary>
+/// <summary>扫描结果的 JSON 文档格式，用于保存和加载（schema v1）。</summary>
 public sealed class ResultDocument
 {
     public int SchemaVersion { get; set; } = 1;
@@ -19,16 +20,17 @@ public sealed class ResultDocument
 /// <summary>扫描结果 JSON 序列化 / 反序列化。</summary>
 public sealed class ResultSerializer
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int MaxSupportedSchemaVersion = 2;
 
     public static JsonSerializerOptions JsonOptions { get; } = CreateOptions();
 
+    /// <summary>保存工作快照：继续使用 v1 扁平格式，兼容旧版本读取。</summary>
     public void Save(string filePath, IEnumerable<FileScanResult> results)
     {
         var items = results.ToList();
         var document = new ResultDocument
         {
-            SchemaVersion = CurrentSchemaVersion,
+            SchemaVersion = 1,
             ToolVersion = typeof(ResultSerializer).Assembly.GetName().Version?.ToString() ?? "1.0.0",
             ExportedAt = DateTime.UtcNow,
             Summary = ScanStatistics.From(items),
@@ -39,32 +41,81 @@ public sealed class ResultSerializer
         File.WriteAllText(filePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
+    /// <summary>加载保存文件（v1）或导出的分组文件（v2）。</summary>
     public ResultDocument Load(string filePath)
     {
-        var json = File.ReadAllText(filePath);
-        ResultDocument? document;
+        // 兼容手工编辑或第三方工具写入的 UTF-8 BOM。
+        var json = File.ReadAllText(filePath).TrimStart((char)0xFEFF);
         try
         {
-            document = JsonSerializer.Deserialize<ResultDocument>(json, JsonOptions);
+            var version = ReadSchemaVersion(json);
+            if (version > MaxSupportedSchemaVersion)
+            {
+                throw new InvalidDataException(
+                    Loc.F("Error.ResultVersion", version, MaxSupportedSchemaVersion));
+            }
+
+            if (version >= 2)
+            {
+                return LoadExportDocument(json);
+            }
+
+            var document = JsonSerializer.Deserialize<ResultDocument>(json, JsonOptions);
+            if (document is null)
+            {
+                throw new InvalidDataException(Loc.T("Error.ResultEmpty"));
+            }
+
+            document.Items ??= new List<FileScanResult>();
+            return document;
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"扫描结果文件格式无效：{ex.Message}", ex);
+            throw new InvalidDataException(Loc.F("Error.ResultFormatInvalid", ex.Message), ex);
         }
+    }
 
-        if (document is null)
+    private static ResultDocument LoadExportDocument(string json)
+    {
+        var export = JsonSerializer.Deserialize<ExportDocument>(json, JsonOptions);
+        if (export is null)
         {
-            throw new InvalidDataException("扫描结果文件为空或格式无效。");
+            throw new InvalidDataException(Loc.T("Error.ResultEmpty"));
         }
 
-        if (document.SchemaVersion > CurrentSchemaVersion)
+        var items = (export.Groups ?? new List<ExportGroup>())
+            .SelectMany(group => group.Files ?? new List<FileScanResult>())
+            .ToList();
+
+        return new ResultDocument
         {
-            throw new InvalidDataException(
-                $"扫描结果文件版本 {document.SchemaVersion} 高于当前支持的版本 {CurrentSchemaVersion}。");
+            SchemaVersion = export.SchemaVersion,
+            ToolVersion = export.ToolVersion,
+            ExportedAt = export.ExportedAt,
+            Summary = ScanStatistics.From(items),
+            Items = items,
+        };
+    }
+
+    private static int ReadSchemaVersion(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException(Loc.T("Error.ResultEmpty"));
         }
 
-        document.Items ??= new List<FileScanResult>();
-        return document;
+        foreach (var property in root.EnumerateObject())
+        {
+            if (property.Name.Equals("SchemaVersion", StringComparison.OrdinalIgnoreCase) &&
+                property.Value.TryGetInt32(out var version))
+            {
+                return version;
+            }
+        }
+
+        return 1;
     }
 
     private static JsonSerializerOptions CreateOptions()

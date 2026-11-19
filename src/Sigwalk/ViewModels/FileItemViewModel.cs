@@ -1,3 +1,4 @@
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
 using Sigwalk.Core.Utilities;
 
@@ -53,7 +54,7 @@ public sealed class FileItemViewModel : ViewModelBase
         _result.ScanStatus == ScanStatus.Pending
             ? "—"
             : !_result.SignatureChecked
-                ? "未检测"
+                ? Loc.T("Common.NotChecked")
                 : _result.SignatureStatusText;
 
     public string SignerNames => _result.SignerNames;
@@ -76,7 +77,7 @@ public sealed class FileItemViewModel : ViewModelBase
         _ => 4,
     };
 
-    public string ScanStatusText => _isScanning ? "扫描中" : _result.ScanStatusText;
+    public string ScanStatusText => _isScanning ? Loc.T("Item.Scanning") : _result.ScanStatusText;
     public bool IsScanning => _isScanning;
     public bool IsFailed => !_isScanning && _result.ScanStatus == ScanStatus.Failed;
 
@@ -84,20 +85,23 @@ public sealed class FileItemViewModel : ViewModelBase
     {
         get
         {
-            var text = $"{_result.FilePath}\n签名状态：{SignatureStatusText}\n扫描状态：{ScanStatusText}";
+            var text =
+                $"{_result.FilePath}\n" +
+                Loc.F("Item.ToolTip.SignatureStatus", SignatureStatusText) + "\n" +
+                Loc.F("Item.ToolTip.ScanStatus", ScanStatusText);
             if (!string.IsNullOrWhiteSpace(SignatureError))
             {
-                text += $"\n签名错误：{SignatureError}";
+                text += "\n" + Loc.F("Item.ToolTip.SignatureError", SignatureError);
             }
 
             if (!string.IsNullOrWhiteSpace(SignatureWarning))
             {
-                text += $"\n警告：{SignatureWarning}";
+                text += "\n" + Loc.F("Item.ToolTip.Warning", SignatureWarning);
             }
 
             if (!string.IsNullOrWhiteSpace(ErrorMessage))
             {
-                text += $"\n错误：{ErrorMessage}";
+                text += "\n" + Loc.F("Item.ToolTip.Error", ErrorMessage);
             }
 
             return text;
@@ -122,6 +126,9 @@ public sealed class FileItemViewModel : ViewModelBase
         OnPropertyChanged(string.Empty);
     }
 
+    /// <summary>语言切换后刷新所有派生的显示文本。</summary>
+    public void RefreshLocalization() => OnPropertyChanged(string.Empty);
+
     private string HashDisplay(string? hash)
     {
         if (!string.IsNullOrWhiteSpace(hash))
@@ -129,7 +136,7 @@ public sealed class FileItemViewModel : ViewModelBase
             return hash;
         }
 
-        return _result.ScanStatus == ScanStatus.Failed ? "读取失败" : "—";
+        return _result.ScanStatus == ScanStatus.Failed ? Loc.T("Common.ReadFailed") : "—";
     }
 }
 

@@ -1,3 +1,4 @@
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
 using Sigwalk.Core.Utilities;
 
@@ -50,7 +51,7 @@ public sealed class FileDiscoveryService
                 continue;
             }
 
-            result.Errors.Add($"路径不存在：{input}");
+            result.Errors.Add(Loc.F("Error.Discovery.PathNotFound", input));
         }
 
         result.Files.Sort(StringComparer.OrdinalIgnoreCase);
@@ -138,7 +139,7 @@ public sealed class FileDiscoveryService
             }
             catch (Exception ex) when (IsRecoverable(ex))
             {
-                result.Warnings.Add($"无法枚举文件：{directory}（{ErrorText.Describe(ex)}）");
+                result.Warnings.Add(Loc.F("Error.Discovery.EnumerateFiles", directory, ErrorText.Describe(ex)));
             }
 
             if (!options.Recursive)
@@ -161,7 +162,7 @@ public sealed class FileDiscoveryService
             }
             catch (Exception ex) when (IsRecoverable(ex))
             {
-                result.Warnings.Add($"无法枚举子目录：{directory}（{ErrorText.Describe(ex)}）");
+                result.Warnings.Add(Loc.F("Error.Discovery.EnumerateDirectories", directory, ErrorText.Describe(ex)));
             }
         }
     }
@@ -173,13 +174,13 @@ public sealed class FileDiscoveryService
             var attributes = File.GetAttributes(directory);
             if ((attributes & FileAttributes.ReparsePoint) != 0)
             {
-                result.Warnings.Add($"已跳过重解析点目录：{directory}");
+                result.Warnings.Add(Loc.F("Error.Discovery.ReparseSkipped", directory));
                 return true;
             }
         }
         catch (Exception ex) when (IsRecoverable(ex))
         {
-            result.Warnings.Add($"无法读取目录属性：{directory}（{ErrorText.Describe(ex)}）");
+            result.Warnings.Add(Loc.F("Error.Discovery.Attributes", directory, ErrorText.Describe(ex)));
             return true;
         }
 

@@ -1,8 +1,10 @@
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Logging;
 using Sigwalk.Core.Models;
+using Sigwalk.Core.Services.Export;
 using Sigwalk.ViewModels;
 using Sigwalk.Views;
 
@@ -17,17 +19,13 @@ public sealed class DialogService
     {
         _log = log;
     }
-    public const string ScanFileFilter =
-        "可执行文件 (*.exe;*.dll;*.sys;*.msi;*.ocx;*.cpl;*.scr;*.com)|*.exe;*.dll;*.sys;*.msi;*.ocx;*.cpl;*.scr;*.com|所有文件 (*.*)|*.*";
-
-    public const string JsonFileFilter = "JSON 文件 (*.json)|*.json";
 
     public string[] OpenFiles(string? initialDirectory)
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择要检测的文件",
-            Filter = ScanFileFilter,
+            Title = Loc.T("Dialog.Title.OpenFiles"),
+            Filter = Loc.T("Dialog.Filter.ScanFiles"),
             Multiselect = true,
             CheckFileExists = true,
         };
@@ -40,8 +38,8 @@ public sealed class DialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "加载扫描结果",
-            Filter = JsonFileFilter,
+            Title = Loc.T("Dialog.Title.Import"),
+            Filter = Loc.T("Dialog.Filter.Json"),
             Multiselect = false,
             CheckFileExists = true,
         };
@@ -54,7 +52,7 @@ public sealed class DialogService
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "选择要扫描的目录",
+            Title = Loc.T("Dialog.Title.OpenFolder"),
             Multiselect = false,
         };
 
@@ -68,22 +66,24 @@ public sealed class DialogService
 
     public string? SaveJsonFile(string defaultFileName, string? initialDirectory)
     {
-        return SaveFile(JsonFileFilter, "json", defaultFileName, initialDirectory);
+        return SaveFile(Loc.T("Dialog.Filter.Json"), "json", defaultFileName, initialDirectory);
     }
 
-    public string? SaveExportFile(string defaultFileName, string? initialDirectory)
+    /// <summary>按设置中的导出格式生成默认扩展名，并让该格式在过滤器中优先显示。</summary>
+    public string? SaveExportFile(
+        string defaultFileName,
+        string? initialDirectory,
+        ExportFormat format = ExportFormat.Csv)
     {
-        return SaveFile(ExportFilter, "csv", defaultFileName, initialDirectory);
+        var extension = ExportService.GetExtension(format).TrimStart('.');
+        return SaveFile(BuildExportFilter(format), extension, defaultFileName, initialDirectory);
     }
-
-    public const string ExportFilter =
-        "CSV 文件 (*.csv)|*.csv|Excel 工作簿 (*.xlsx)|*.xlsx|JSON 文件 (*.json)|*.json";
 
     public string? SaveFile(string filter, string defaultExtension, string defaultFileName, string? initialDirectory)
     {
         var dialog = new SaveFileDialog
         {
-            Title = "保存",
+            Title = Loc.T("Dialog.Title.Save"),
             Filter = filter,
             DefaultExt = defaultExtension,
             FileName = defaultFileName,
@@ -95,18 +95,37 @@ public sealed class DialogService
         return dialog.ShowDialog(GetOwner()) == true ? dialog.FileName : null;
     }
 
-    public void ShowInfo(string message, string title = "提示") =>
-        MessageBox.Show(GetOwner(), message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+    public void ShowInfo(string message, string? title = null) =>
+        MessageBox.Show(
+            GetOwner(),
+            message,
+            title ?? Loc.T("Dialog.Title.Info"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
 
-    public void ShowWarning(string message, string title = "警告") =>
-        MessageBox.Show(GetOwner(), message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    public void ShowWarning(string message, string? title = null) =>
+        MessageBox.Show(
+            GetOwner(),
+            message,
+            title ?? Loc.T("Dialog.Title.Warning"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
 
-    public void ShowError(string message, string title = "错误") =>
-        MessageBox.Show(GetOwner(), message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+    public void ShowError(string message, string? title = null) =>
+        MessageBox.Show(
+            GetOwner(),
+            message,
+            title ?? Loc.T("Dialog.Title.Error"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
 
-    public bool Confirm(string message, string title = "确认") =>
-        MessageBox.Show(GetOwner(), message, title, MessageBoxButton.YesNo, MessageBoxImage.Question) ==
-        MessageBoxResult.Yes;
+    public bool Confirm(string message, string? title = null) =>
+        MessageBox.Show(
+            GetOwner(),
+            message,
+            title ?? Loc.T("Dialog.Title.Confirm"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     public bool ShowSettings(SettingsViewModel viewModel)
     {
@@ -140,12 +159,35 @@ public sealed class DialogService
     public void ShowAbout()
     {
         var version = typeof(DialogService).Assembly.GetName().Version?.ToString() ?? "1.0.0";
-        ShowInfo(
-            $"Sigwalk 文件数字签名检测工具\n版本：{version}\n\n" +
-            "基于 Windows Authenticode（WinVerifyTrust）验证嵌入式数字签名，\n" +
-            "支持 SHA1/SHA256 哈希、多重签名、时间戳与证书链信息展示。\n\n" +
-            "注意：当前版本不检测 Windows 目录签名（Catalog）。",
-            "关于 Sigwalk");
+        ShowInfo(Loc.F("About.Text", version), Loc.T("About.Title"));
+    }
+
+    private static string BuildExportFilter(ExportFormat format)
+    {
+        var pairs = ParseFilter(Loc.T("Dialog.Filter.Export"));
+        if (pairs.Count == 0)
+        {
+            return Loc.T("Dialog.Filter.Export");
+        }
+
+        var extension = ExportService.GetExtension(format);
+        var ordered = pairs
+            .OrderByDescending(pair => pair.Pattern.Contains(extension, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return string.Join("|", ordered.SelectMany(pair => new[] { pair.Name, pair.Pattern }));
+    }
+
+    private static List<(string Name, string Pattern)> ParseFilter(string filter)
+    {
+        var parts = filter.Split('|');
+        var pairs = new List<(string, string)>();
+        for (var index = 0; index + 1 < parts.Length; index += 2)
+        {
+            pairs.Add((parts[index], parts[index + 1]));
+        }
+
+        return pairs;
     }
 
     private static void ApplyInitialDirectory(FileDialog dialog, string? initialDirectory)

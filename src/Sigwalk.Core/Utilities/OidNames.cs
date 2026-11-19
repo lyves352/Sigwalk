@@ -1,3 +1,5 @@
+using Sigwalk.Core.Localization;
+
 namespace Sigwalk.Core.Utilities;
 
 /// <summary>常见签名/摘要算法 OID 到可读名称的映射。</summary>
@@ -36,7 +38,7 @@ public static class OidNames
     {
         if (string.IsNullOrWhiteSpace(oid))
         {
-            return "未知";
+            return Loc.T("Common.Unknown");
         }
 
         return SignatureAlgorithms.TryGetValue(oid, out var name) ? name : oid;
@@ -46,7 +48,7 @@ public static class OidNames
     {
         if (string.IsNullOrWhiteSpace(oid))
         {
-            return "未知";
+            return Loc.T("Common.Unknown");
         }
 
         return DigestAlgorithms.TryGetValue(oid, out var name) ? name : oid;
@@ -56,7 +58,11 @@ public static class OidNames
     public static string Describe(string? signatureOid, string? digestOid)
     {
         var signature = SignatureAlgorithm(signatureOid);
-        var digest = DigestAlgorithm(digestOid);
-        return digest == "未知" ? signature : $"{signature} / {digest}";
+        if (string.IsNullOrWhiteSpace(digestOid))
+        {
+            return signature;
+        }
+
+        return $"{signature} / {DigestAlgorithm(digestOid)}";
     }
 }

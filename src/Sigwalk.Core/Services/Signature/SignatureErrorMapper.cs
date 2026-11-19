@@ -1,4 +1,5 @@
 using Sigwalk.Core.Interop;
+using Sigwalk.Core.Localization;
 
 namespace Sigwalk.Core.Services.Signature;
 
@@ -20,7 +21,7 @@ internal static class SignatureErrorMapper
     {
         if (status == Win32ErrorCodes.S_OK)
         {
-            return new SignatureMapping(SignatureOutcome.Valid, "签名有效");
+            return new SignatureMapping(SignatureOutcome.Valid, Loc.T("Signature.Message.Valid"));
         }
 
         if (Win32ErrorCodes.IsNoSignatureCode(status))
@@ -28,23 +29,25 @@ internal static class SignatureErrorMapper
             return hasEmbeddedSignature
                 ? new SignatureMapping(
                     SignatureOutcome.Invalid,
-                    $"检测到嵌入式签名，但系统无法完成验证（{Win32ErrorCodes.Format(status)}）")
-                : new SignatureMapping(SignatureOutcome.Unsigned, "文件没有嵌入式数字签名");
+                    Loc.F("Signature.Message.InvalidWithEmbedded", Win32ErrorCodes.Format(status)))
+                : new SignatureMapping(
+                    SignatureOutcome.Unsigned,
+                    Loc.T("Signature.Message.Unsigned"));
         }
 
         if (Win32ErrorCodes.IsRevocationUnavailableCode(status))
         {
             return new SignatureMapping(
                 SignatureOutcome.ValidWithWarning,
-                "签名有效",
-                $"证书吊销状态无法确认（{Win32ErrorCodes.Format(status)}）");
+                Loc.T("Signature.Message.Valid"),
+                Loc.F("Signature.Message.RevocationUnavailable", Win32ErrorCodes.Format(status)));
         }
 
         if (status == Win32ErrorCodes.TRUST_E_PROVIDER_UNKNOWN)
         {
             return new SignatureMapping(
                 SignatureOutcome.Unknown,
-                $"找不到签名验证提供程序（{Win32ErrorCodes.Format(status)}）");
+                Loc.F("Signature.Message.ProviderUnknown", Win32ErrorCodes.Format(status)));
         }
 
         if (IsDefiniteInvalid(status))
@@ -55,10 +58,10 @@ internal static class SignatureErrorMapper
         return hasEmbeddedSignature
             ? new SignatureMapping(
                 SignatureOutcome.Invalid,
-                $"签名验证失败（{Win32ErrorCodes.Format(status)}）")
+                Loc.F("Signature.Message.VerifyFailed", Win32ErrorCodes.Format(status)))
             : new SignatureMapping(
                 SignatureOutcome.Unknown,
-                $"无法确定签名状态（{Win32ErrorCodes.Format(status)}）");
+                Loc.F("Signature.Message.Unknown", Win32ErrorCodes.Format(status)));
     }
 
     private static bool IsDefiniteInvalid(int status) =>
@@ -79,21 +82,21 @@ internal static class SignatureErrorMapper
     {
         var reason = status switch
         {
-            Win32ErrorCodes.TRUST_E_BAD_DIGEST => "文件已被修改或签名摘要不匹配",
-            Win32ErrorCodes.CERT_E_EXPIRED => "签名证书已过期，且没有有效时间戳",
-            Win32ErrorCodes.CERT_E_UNTRUSTEDROOT => "证书链的根证书不受信任",
-            Win32ErrorCodes.CERT_E_CHAINING => "证书链构建失败",
-            Win32ErrorCodes.CERT_E_REVOKED => "签名证书已被吊销",
-            Win32ErrorCodes.CERT_E_WRONG_USAGE => "证书用途不是代码签名",
-            Win32ErrorCodes.TRUST_E_EXPLICIT_DISTRUST => "证书被系统明确不信任",
-            Win32ErrorCodes.TRUST_E_SUBJECT_NOT_TRUSTED => "签名主体不被系统信任",
-            Win32ErrorCodes.TRUST_E_TIME_STAMP => "时间戳签名验证失败",
-            Win32ErrorCodes.TRUST_E_CERT_SIGNATURE => "证书签名无效",
-            Win32ErrorCodes.CRYPT_E_SECURITY_SETTINGS => "安全设置禁止该签名算法",
-            Win32ErrorCodes.NTE_BAD_ALGID => "不支持的签名算法",
-            _ => "签名验证失败",
+            Win32ErrorCodes.TRUST_E_BAD_DIGEST => Loc.T("Signature.Reason.BadDigest"),
+            Win32ErrorCodes.CERT_E_EXPIRED => Loc.T("Signature.Reason.Expired"),
+            Win32ErrorCodes.CERT_E_UNTRUSTEDROOT => Loc.T("Signature.Reason.UntrustedRoot"),
+            Win32ErrorCodes.CERT_E_CHAINING => Loc.T("Signature.Reason.Chaining"),
+            Win32ErrorCodes.CERT_E_REVOKED => Loc.T("Signature.Reason.Revoked"),
+            Win32ErrorCodes.CERT_E_WRONG_USAGE => Loc.T("Signature.Reason.WrongUsage"),
+            Win32ErrorCodes.TRUST_E_EXPLICIT_DISTRUST => Loc.T("Signature.Reason.ExplicitDistrust"),
+            Win32ErrorCodes.TRUST_E_SUBJECT_NOT_TRUSTED => Loc.T("Signature.Reason.SubjectNotTrusted"),
+            Win32ErrorCodes.TRUST_E_TIME_STAMP => Loc.T("Signature.Reason.Timestamp"),
+            Win32ErrorCodes.TRUST_E_CERT_SIGNATURE => Loc.T("Signature.Reason.CertSignature"),
+            Win32ErrorCodes.CRYPT_E_SECURITY_SETTINGS => Loc.T("Signature.Reason.SecuritySettings"),
+            Win32ErrorCodes.NTE_BAD_ALGID => Loc.T("Signature.Reason.BadAlgId"),
+            _ => Loc.T("Signature.Reason.VerifyFailed"),
         };
 
-        return $"{reason}（{Win32ErrorCodes.Format(status)}）";
+        return reason + Loc.F("Error.Detail", Win32ErrorCodes.Format(status));
     }
 }

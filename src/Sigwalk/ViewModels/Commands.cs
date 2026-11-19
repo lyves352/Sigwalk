@@ -32,6 +32,31 @@ public sealed class RelayCommand : ICommand
     public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }
 
+/// <summary>带参数的同步命令（用于主题/语言等枚举菜单项）。</summary>
+public sealed class RelayCommand<T> : ICommand
+{
+    private readonly Action<T?> _execute;
+    private readonly Func<T?, bool>? _canExecute;
+
+    public RelayCommand(Action<T?> execute, Func<T?, bool>? canExecute = null)
+    {
+        _execute = execute;
+        _canExecute = canExecute;
+    }
+
+    public event EventHandler? CanExecuteChanged
+    {
+        add => CommandManager.RequerySuggested += value;
+        remove => CommandManager.RequerySuggested -= value;
+    }
+
+    public bool CanExecute(object? parameter) => _canExecute?.Invoke(Cast(parameter)) ?? true;
+
+    public void Execute(object? parameter) => _execute(Cast(parameter));
+
+    private static T? Cast(object? parameter) => parameter is T value ? value : default;
+}
+
 /// <summary>异步命令；执行期间自动禁用，并统一处理异常。</summary>
 public sealed class AsyncRelayCommand : ICommand
 {

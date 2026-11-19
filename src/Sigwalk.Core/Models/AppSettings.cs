@@ -4,13 +4,22 @@ namespace Sigwalk.Core.Models;
 public sealed class AppSettings
 {
     public int Version { get; set; } = 1;
-    public ThemeMode Theme { get; set; } = ThemeMode.Light;
+    public ThemeMode Theme { get; set; } = ThemeMode.Auto;
+    public AppLanguage Language { get; set; } = AppLanguage.Chinese;
     public bool Recursive { get; set; } = true;
     public string Extensions { get; set; } = ScanOptions.DefaultExtensions;
     public int MaxConcurrency { get; set; } = ScanOptions.DefaultConcurrency;
     public ScanMode ScanMode { get; set; } = ScanMode.Full;
     public RevocationMode RevocationMode { get; set; } = RevocationMode.None;
     public bool AutoSortAfterScan { get; set; } = true;
+    public ExportFormat ExportFormat { get; set; } = ExportFormat.Csv;
+
+    /// <summary>导出内容：默认「精简」。</summary>
+    public ExportContentScope ExportContent { get; set; } = ExportContentScope.Compact;
+
+    /// <summary>隐藏的表格列键；空表示全部显示。</summary>
+    public List<string> HiddenColumns { get; set; } = new();
+
     public string? LastDirectory { get; set; }
 
     public ScanOptions ToScanOptions() => new()

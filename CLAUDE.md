@@ -9,6 +9,8 @@ Sigwalk 是一个 Windows 文件数字签名检测工具（C# / WPF / .NET 8）�
 - 核心库：`src/Sigwalk.Core`（无 WPF 依赖，含 P/Invoke / 签名 / 哈希 / 扫描 / 导出）
 - 测试：`tests/Sigwalk.Tests`（xUnit，仅引用 Core）
 - 一键发布：`scripts/build.bat`
+- 命令行：`Sigwalk.exe [选项] <文件或目录...>`，无界面扫描/导出，复用 Core 的发现、扫描、签名验证与导出逻辑
+- 本地化：Core 内置 `Localization/zh-Hans.json` / `en-US.json`（嵌入式资源），App 通过 `{loc:Tr Key}` 绑定
 
 ## 环境与常用命令
 
@@ -82,6 +84,17 @@ Sigwalk.Tests ──> Sigwalk.Core
 - XLSX：手写最小 OOXML（`ZipArchive` + `XmlWriter` + inlineStr），禁止引入第三方 Excel 库；清洗 XML 非法字符、限制单元格长度。
 - JSON：`schemaVersion` + 枚举字符串 + ISO 时间；`ResultSerializer` 同时用于导出、保存、加载。
 - 不将 SHA1/SHA256 合并为一个字段。
+- 分组导出：`ExportDocumentBuilder` 统一生成概况 + 固定顺序分组（有效/未签名/无效/未知/失败）；`Compact` 省略有效组；0 条分组保留。
+- 保存结果写 v1 扁平 JSON；导出写 v2 分组 JSON；`ResultSerializer.Load` 同时兼容 v1/v2。
+- 导出内容不受表格列显隐影响，始终使用 `ExportColumns.All` 的 24 列。
+
+### 本地化与 CLI
+
+- Core 不得引用 WPF；XAML 本地化由 App 的 `TrExtension` 绑定 Core 的 `LocalizationService` 索引器。
+- 新增界面文本必须同时补充 `zh-Hans.json` 与 `en-US.json`，key 集合必须一致（`LocalizationTests` 会校验）。
+- 不在静态构造函数中固化本地化文本；集合/选项在语言切换时重建或存 key。
+- CLI 参数解析在 Core（可测试），控制台附加与运行在 App；`WinExe` 通过 `AttachConsole/AllocConsole` 输出。
+- CLI 与 GUI 共用 `FileDiscoveryService`、`ScanCoordinator`、`FileScanProcessor`、`ExportService`，不得复制检测逻辑。
 
 ### 资源与异常
 
@@ -91,7 +104,7 @@ Sigwalk.Tests ──> Sigwalk.Core
 
 ## 测试
 
-- `dotnet test` 必须全部通过；当前 70 个测试。
+- `dotnet test` 必须全部通过；当前 96 个测试。
 - 不把 WPF 引入测试项目；过滤、扫描、导出、签名映射都在 Core 测试。
 - 真实签名样本测试必须优雅跳过（文件不存在或环境不满足时直接返回并输出 SKIP）。
 - 篡改测试：复制已签名 PE，修改 `.text` 段后应得到 `Invalid`。

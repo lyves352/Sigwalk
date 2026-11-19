@@ -5,7 +5,7 @@ public sealed class FileFilter
 {
     public SignatureFilter StatusFilter { get; set; } = SignatureFilter.All;
 
-    /// <summary>统一搜索文本：文件名、完整路径、签名者、SHA1、SHA256。</summary>
+    /// <summary>统一搜索文本：文件名、完整路径、文件类型、签名者、SHA1、SHA256。</summary>
     public string? SearchText { get; set; }
 
     /// <summary>显示用扩展名过滤（分号/逗号/空格分隔，空表示全部）。</summary>
@@ -85,6 +85,7 @@ public sealed class FileFilter
         var text = SearchText.Trim();
         if (Contains(result.FileName, text) ||
             Contains(result.FilePath, text) ||
+            Contains(result.FileType, text) ||
             Contains(result.Sha1, text) ||
             Contains(result.Sha256, text))
         {

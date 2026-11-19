@@ -77,4 +77,49 @@ public enum ThemeMode
 {
     Light = 0,
     Dark = 1,
+
+    /// <summary>跟随操作系统主题（默认）。</summary>
+    Auto = 2,
+}
+
+/// <summary>界面语言。</summary>
+public enum AppLanguage
+{
+    Chinese = 0,
+    English = 1,
+}
+
+/// <summary>导出文件格式。</summary>
+public enum ExportFormat
+{
+    Csv = 0,
+    Xlsx = 1,
+    Json = 2,
+}
+
+/// <summary>导出内容范围。</summary>
+public enum ExportContentScope
+{
+    /// <summary>全部结果（含签名有效文件）。</summary>
+    All = 0,
+
+    /// <summary>仅需关注的文件（未签名、无效、未知、失败）。</summary>
+    Compact = 1,
+}
+
+/// <summary>导出明细分组。</summary>
+public enum ExportGroupKind
+{
+    Valid,
+    Unsigned,
+    Invalid,
+    Unknown,
+    Failed,
+}
+
+/// <summary>导出概况中的总体结论。</summary>
+public enum ExportVerdict
+{
+    Ok,
+    IssuesFound,
 }

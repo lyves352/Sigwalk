@@ -1,7 +1,7 @@
 using System.Text;
 using System.Windows.Input;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
-using Sigwalk.Core.Utilities;
 using Sigwalk.Services;
 
 namespace Sigwalk.ViewModels;
@@ -31,13 +31,14 @@ public sealed class FileDetailViewModel : ViewModelBase
 
     public string FileName => Result.FileName;
     public string FilePath => Result.FilePath;
-    public string SignatureStatusText => Result.SignatureChecked ? Result.SignatureStatusText : "未检测";
+    public string SignatureStatusText =>
+        Result.SignatureChecked ? Result.SignatureStatusText : Loc.T("Common.NotChecked");
     public string ScanStatusText => Result.ScanStatusText;
     public string SignatureWarning => Result.SignatureWarning ?? string.Empty;
     public string SignatureError => Result.SignatureError ?? string.Empty;
     public string Sha1Text => Result.Sha1Text;
     public string Sha256Text => Result.Sha256Text;
-    public string SignatureCountText => $"{Result.Signatures.Count} 个签名";
+    public string SignatureCountText => Loc.F("Detail.Header.SignatureCount", Result.Signatures.Count);
 
     public ICommand CopyPathCommand { get; }
     public ICommand CopySha1Command { get; }
@@ -50,31 +51,35 @@ public sealed class FileDetailViewModel : ViewModelBase
     {
         if (Result.Signatures.Count == 0)
         {
-            return $"签名状态：{SignatureStatusText}\n错误：{SignatureError}";
+            return $"{Loc.T("Copy.Label.SignatureStatus")}: {SignatureStatusText}\n" +
+                   $"{Loc.T("Copy.Label.Error")}: {SignatureError}";
         }
 
         var builder = new StringBuilder();
         foreach (var signature in Result.Signatures)
         {
             builder.AppendLine(signature.DisplayName);
-            builder.AppendLine($"  状态：{signature.StatusText}");
-            builder.AppendLine($"  签名者：{signature.SignerName}");
-            builder.AppendLine($"  颁发者：{signature.IssuerName}");
-            builder.AppendLine($"  有效期：{signature.ValidityText}");
-            builder.AppendLine($"  序列号：{signature.Certificate?.SerialNumber}");
-            builder.AppendLine($"  指纹：{signature.Certificate?.Thumbprint}");
-            builder.AppendLine($"  算法：{signature.SignatureAlgorithm} / {signature.DigestAlgorithm}");
-            builder.AppendLine($"  时间戳签名者：{signature.Timestamp?.SignerName}");
-            builder.AppendLine($"  时间戳时间：{signature.Timestamp?.TimestampText}");
-            builder.AppendLine($"  证书链：{signature.Certificate?.ChainStatusText}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Status")}: {signature.StatusText}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Signer")}: {signature.SignerName}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Issuer")}: {signature.IssuerName}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Validity")}: {signature.ValidityText}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.SerialNumber")}: {signature.Certificate?.SerialNumber}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Thumbprint")}: {signature.Certificate?.Thumbprint}");
+            builder.AppendLine(
+                $"  {Loc.T("Copy.Label.Algorithm")}: {signature.SignatureAlgorithm} / {signature.DigestAlgorithm}");
+            builder.AppendLine(
+                $"  {Loc.T("Copy.Label.TimestampSigner")}: {signature.Timestamp?.SignerName}");
+            builder.AppendLine(
+                $"  {Loc.T("Copy.Label.TimestampTime")}: {signature.Timestamp?.TimestampText}");
+            builder.AppendLine($"  {Loc.T("Copy.Label.Chain")}: {signature.Certificate?.ChainStatusText}");
             if (!string.IsNullOrWhiteSpace(signature.ErrorMessage))
             {
-                builder.AppendLine($"  错误：{signature.ErrorMessage}");
+                builder.AppendLine($"  {Loc.T("Copy.Label.Error")}: {signature.ErrorMessage}");
             }
 
             if (!string.IsNullOrWhiteSpace(signature.Warning))
             {
-                builder.AppendLine($"  警告：{signature.Warning}");
+                builder.AppendLine($"  {Loc.T("Copy.Label.Warning")}: {signature.Warning}");
             }
         }
 
@@ -84,33 +89,38 @@ public sealed class FileDetailViewModel : ViewModelBase
     private static IReadOnlyList<DetailField> BuildBasicFields(FileScanResult result)
     {
         var version = result.VersionInfo;
+        var dash = Loc.T("Common.Dash");
         var fields = new List<DetailField>
         {
-            new("文件名", result.FileName),
-            new("完整路径", result.FilePath),
-            new("文件大小", result.SizeText),
-            new("字节数", result.SizeBytes.ToString()),
-            new("文件类型", result.FileType),
-            new("修改时间", result.LastWriteTime == DateTime.MinValue
-                ? "—"
+            new(Loc.T("Detail.Field.FileName"), result.FileName),
+            new(Loc.T("Detail.Field.FilePath"), result.FilePath),
+            new(Loc.T("Detail.Field.FileSize"), result.SizeText),
+            new(Loc.T("Detail.Field.SizeBytes"), result.SizeBytes.ToString()),
+            new(Loc.T("Detail.Field.FileType"), result.FileType),
+            new(Loc.T("Detail.Field.LastWriteTime"), result.LastWriteTime == DateTime.MinValue
+                ? dash
                 : result.LastWriteTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")),
-            new("扫描时间", result.ScannedAt == default
-                ? "—"
+            new(Loc.T("Detail.Field.ScannedAt"), result.ScannedAt == default
+                ? dash
                 : result.ScannedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")),
-            new("扫描状态", result.ScanStatusText),
-            new("签名状态", result.SignatureChecked ? result.SignatureStatusText : "未检测"),
-            new("签名警告", string.IsNullOrWhiteSpace(result.SignatureWarning) ? "—" : result.SignatureWarning),
-            new("签名错误", string.IsNullOrWhiteSpace(result.SignatureError) ? "—" : result.SignatureError),
-            new("扫描错误", string.IsNullOrWhiteSpace(result.ErrorMessage) ? "—" : result.ErrorMessage),
-            new("公司名称", version?.CompanyName ?? "—"),
-            new("产品名称", version?.ProductName ?? "—"),
-            new("文件说明", version?.FileDescription ?? "—"),
-            new("文件版本", version?.FileVersion ?? "—"),
-            new("产品版本", version?.ProductVersion ?? "—"),
-            new("原始文件名", version?.OriginalFilename ?? "—"),
-            new("内部名称", version?.InternalName ?? "—"),
-            new("版权", version?.Copyright ?? "—"),
-            new("备注", version?.Comments ?? "—"),
+            new(Loc.T("Detail.Field.ScanStatus"), result.ScanStatusText),
+            new(Loc.T("Detail.Field.SignatureStatus"),
+                result.SignatureChecked ? result.SignatureStatusText : Loc.T("Common.NotChecked")),
+            new(Loc.T("Detail.Field.SignatureWarning"),
+                string.IsNullOrWhiteSpace(result.SignatureWarning) ? dash : result.SignatureWarning),
+            new(Loc.T("Detail.Field.SignatureError"),
+                string.IsNullOrWhiteSpace(result.SignatureError) ? dash : result.SignatureError),
+            new(Loc.T("Detail.Field.ScanError"),
+                string.IsNullOrWhiteSpace(result.ErrorMessage) ? dash : result.ErrorMessage),
+            new(Loc.T("Detail.Field.Company"), version?.CompanyName ?? dash),
+            new(Loc.T("Detail.Field.Product"), version?.ProductName ?? dash),
+            new(Loc.T("Detail.Field.Description"), version?.FileDescription ?? dash),
+            new(Loc.T("Detail.Field.FileVersion"), version?.FileVersion ?? dash),
+            new(Loc.T("Detail.Field.ProductVersion"), version?.ProductVersion ?? dash),
+            new(Loc.T("Detail.Field.OriginalFileName"), version?.OriginalFilename ?? dash),
+            new(Loc.T("Detail.Field.InternalName"), version?.InternalName ?? dash),
+            new(Loc.T("Detail.Field.Copyright"), version?.Copyright ?? dash),
+            new(Loc.T("Detail.Field.Comments"), version?.Comments ?? dash),
         };
 
         return fields;

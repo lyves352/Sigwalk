@@ -59,6 +59,10 @@ public sealed class SignatureInfo
 
     [JsonIgnore]
     public string DisplayName =>
-        (IsPrimary ? "主签名" : IsNested ? "嵌套签名" : $"附加签名 #{Index}") +
+        (IsPrimary
+            ? Localization.Loc.T("Signature.Role.Primary")
+            : IsNested
+                ? Localization.Loc.T("Signature.Role.Nested")
+                : $"{Localization.Loc.T("Signature.Role.Secondary")} #{Index}") +
         (string.IsNullOrEmpty(SignerName) ? string.Empty : $" - {SignerName}");
 }

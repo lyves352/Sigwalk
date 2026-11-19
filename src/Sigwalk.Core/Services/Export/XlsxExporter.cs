@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
+using Sigwalk.Core.Localization;
 using Sigwalk.Core.Models;
 
 namespace Sigwalk.Core.Services.Export;
@@ -15,14 +16,77 @@ public sealed class XlsxExporter
     private const string RelNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private const string PackageRelNs = "http://schemas.openxmlformats.org/package/2006/relationships";
     private const string ContentTypesNs = "http://schemas.openxmlformats.org/package/2006/content-types";
+    private const int MaxRows = 1_048_576;
 
+    /// <summary>扁平导出（兼容旧行为）：表头 + 数据行。</summary>
     public void Write(string filePath, IReadOnlyList<FileScanResult> results)
     {
-        // Excel 单工作表最多 1,048,576 行（含表头），超出时明确报错而不是生成损坏文件。
-        if (results.Count > 1_048_575)
+        // 先按数量拒绝，避免为超限列表分配/枚举内存。
+        if (results.Count + 1 > MaxRows)
         {
-            throw new InvalidOperationException(
-                $"结果数量 {results.Count} 超过 Excel 单工作表上限 1,048,575 行，请改用 CSV 或 JSON 导出。");
+            throw new InvalidOperationException(Loc.F("Error.XlsxTooManyRows", results.Count));
+        }
+
+        var rows = new List<SheetRow>(results.Count + 1)
+        {
+            new(ExportColumns.All.Select(column => new SheetCell(column.Header, Bold: true)).ToList()),
+        };
+
+        for (var index = 0; index < results.Count; index++)
+        {
+            rows.Add(new SheetRow(
+                ExportColumns.All
+                    .Select(column => new SheetCell(column.Value(results[index], index), Bold: false))
+                    .ToList()));
+        }
+
+        WritePackage(filePath, rows, freezeFirstRow: true);
+    }
+
+    /// <summary>分组导出：与 CSV 相同的概况 + 分组结构。</summary>
+    public void WriteReport(string filePath, ExportDocument document)
+    {
+        var rows = new List<SheetRow>();
+        foreach (var row in ExportReportRows.Build(document))
+        {
+            switch (row.Kind)
+            {
+                case ExportRowKind.Blank:
+                    continue;
+                case ExportRowKind.SectionTitle:
+                case ExportRowKind.GroupTitle:
+                case ExportRowKind.EmptyGroup:
+                    rows.Add(new SheetRow(new[] { new SheetCell(row.Label, Bold: true) }));
+                    break;
+                case ExportRowKind.SummaryPair:
+                    rows.Add(new SheetRow(new[]
+                    {
+                        new SheetCell(row.Label, Bold: true),
+                        new SheetCell(row.Value, Bold: false),
+                    }));
+                    break;
+                case ExportRowKind.ColumnHeader:
+                    rows.Add(new SheetRow(
+                        ExportColumns.All.Select(column => new SheetCell(column.Header, Bold: true)).ToList()));
+                    break;
+                case ExportRowKind.DataRow when row.Result is not null:
+                    rows.Add(new SheetRow(
+                        ExportColumns.All
+                            .Select(column => new SheetCell(column.Value(row.Result, row.Index), Bold: false))
+                            .ToList()));
+                    break;
+            }
+        }
+
+        WritePackage(filePath, rows, freezeFirstRow: false);
+    }
+
+    private static void WritePackage(string filePath, IReadOnlyList<SheetRow> rows, bool freezeFirstRow)
+    {
+        // Excel 单工作表最多 1,048,576 行，超出时明确报错而不是生成损坏文件。
+        if (rows.Count > MaxRows)
+        {
+            throw new InvalidOperationException(Loc.F("Error.XlsxTooManyRows", rows.Count));
         }
 
         using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
@@ -33,7 +97,7 @@ public sealed class XlsxExporter
         WriteWorkbook(archive);
         WriteWorkbookRelationships(archive);
         WriteStyles(archive);
-        WriteWorksheet(archive, results);
+        WriteWorksheet(archive, rows, freezeFirstRow);
     }
 
     private static void WriteContentTypes(ZipArchive archive)
@@ -97,13 +161,24 @@ public sealed class XlsxExporter
             writer.WriteAttributeString("xmlns", "r", null, RelNs);
             writer.WriteStartElement("sheets", MainNs);
             writer.WriteStartElement("sheet", MainNs);
-            writer.WriteAttributeString("name", "扫描结果");
+            writer.WriteAttributeString("name", SheetName());
             writer.WriteAttributeString("sheetId", "1");
             writer.WriteAttributeString("id", RelNs, "rId1");
             writer.WriteEndElement();
             writer.WriteEndElement();
             writer.WriteEndElement();
         });
+    }
+
+    private static string SheetName()
+    {
+        var name = Loc.T("Export.SheetName");
+        foreach (var invalid in new[] { ':', '\\', '/', '?', '*', '[', ']' })
+        {
+            name = name.Replace(invalid, '_');
+        }
+
+        return name.Length <= 31 ? name : name[..31];
     }
 
     private static void WriteWorkbookRelationships(ZipArchive archive)
@@ -221,23 +296,26 @@ public sealed class XlsxExporter
         writer.WriteEndElement();
     }
 
-    private static void WriteWorksheet(ZipArchive archive, IReadOnlyList<FileScanResult> results)
+    private static void WriteWorksheet(ZipArchive archive, IReadOnlyList<SheetRow> rows, bool freezeFirstRow)
     {
         WriteXml(archive, "xl/worksheets/sheet1.xml", writer =>
         {
             writer.WriteStartElement("worksheet", MainNs);
 
-            writer.WriteStartElement("sheetViews", MainNs);
-            writer.WriteStartElement("sheetView", MainNs);
-            writer.WriteAttributeString("workbookViewId", "0");
-            writer.WriteStartElement("pane", MainNs);
-            writer.WriteAttributeString("ySplit", "1");
-            writer.WriteAttributeString("topLeftCell", "A2");
-            writer.WriteAttributeString("activePane", "bottomLeft");
-            writer.WriteAttributeString("state", "frozen");
-            writer.WriteEndElement();
-            writer.WriteEndElement();
-            writer.WriteEndElement();
+            if (freezeFirstRow)
+            {
+                writer.WriteStartElement("sheetViews", MainNs);
+                writer.WriteStartElement("sheetView", MainNs);
+                writer.WriteAttributeString("workbookViewId", "0");
+                writer.WriteStartElement("pane", MainNs);
+                writer.WriteAttributeString("ySplit", "1");
+                writer.WriteAttributeString("topLeftCell", "A2");
+                writer.WriteAttributeString("activePane", "bottomLeft");
+                writer.WriteAttributeString("state", "frozen");
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+            }
 
             writer.WriteStartElement("cols", MainNs);
             for (var column = 0; column < ExportColumns.All.Count; column++)
@@ -253,23 +331,15 @@ public sealed class XlsxExporter
 
             writer.WriteStartElement("sheetData", MainNs);
 
-            writer.WriteStartElement("row", MainNs);
-            writer.WriteAttributeString("r", "1");
-            for (var column = 0; column < ExportColumns.All.Count; column++)
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
             {
-                WriteCell(writer, 1, column, ExportColumns.All[column].Header, header: true);
-            }
-            writer.WriteEndElement();
-
-            for (var index = 0; index < results.Count; index++)
-            {
-                var row = index + 2;
+                var rowNumber = rowIndex + 1;
                 writer.WriteStartElement("row", MainNs);
-                writer.WriteAttributeString("r", row.ToString());
-                for (var column = 0; column < ExportColumns.All.Count; column++)
+                writer.WriteAttributeString("r", rowNumber.ToString());
+                var cells = rows[rowIndex].Cells;
+                for (var column = 0; column < cells.Count; column++)
                 {
-                    var value = ExportColumns.All[column].Value(results[index], index);
-                    WriteCell(writer, row, column, value, header: false);
+                    WriteCell(writer, rowNumber, column, cells[column].Value, cells[column].Bold);
                 }
                 writer.WriteEndElement();
             }
@@ -279,12 +349,12 @@ public sealed class XlsxExporter
         });
     }
 
-    private static void WriteCell(XmlWriter writer, int row, int column, string? value, bool header)
+    private static void WriteCell(XmlWriter writer, int row, int column, string? value, bool bold)
     {
         writer.WriteStartElement("c", MainNs);
         writer.WriteAttributeString("r", ColumnName(column) + row);
         writer.WriteAttributeString("t", "inlineStr");
-        if (header)
+        if (bold)
         {
             writer.WriteAttributeString("s", "1");
         }
@@ -328,4 +398,8 @@ public sealed class XlsxExporter
         write(writer);
         writer.WriteEndDocument();
     }
+
+    private sealed record SheetCell(string? Value, bool Bold);
+
+    private sealed record SheetRow(IReadOnlyList<SheetCell> Cells);
 }

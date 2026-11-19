@@ -11,4 +11,12 @@
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 内置双语字符串表；不使用 satellite 程序集，兼容单文件发布 -->
+    <EmbeddedResource Include="Localization\zh-Hans.json"
+                      LogicalName="Sigwalk.Core.Localization.zh-Hans.json" />
+    <EmbeddedResource Include="Localization\en-US.json"
+                      LogicalName="Sigwalk.Core.Localization.en-US.json" />
+  </ItemGroup>
+
 </Project>

@@ -14,7 +14,11 @@ public class SettingsServiceTests
 
         var settings = service.Load();
 
-        Assert.Equal(ThemeMode.Light, settings.Theme);
+        Assert.Equal(ThemeMode.Auto, settings.Theme);
+        Assert.Equal(AppLanguage.Chinese, settings.Language);
+        Assert.Equal(ExportFormat.Csv, settings.ExportFormat);
+        Assert.Equal(ExportContentScope.Compact, settings.ExportContent);
+        Assert.Empty(settings.HiddenColumns);
         Assert.True(settings.Recursive);
         Assert.Equal(ScanMode.Full, settings.ScanMode);
         Assert.Equal(RevocationMode.None, settings.RevocationMode);
@@ -34,6 +38,10 @@ public class SettingsServiceTests
             ScanMode = ScanMode.HashOnly,
             RevocationMode = RevocationMode.Online,
             AutoSortAfterScan = false,
+            Language = AppLanguage.English,
+            ExportFormat = ExportFormat.Json,
+            ExportContent = ExportContentScope.All,
+            HiddenColumns = new List<string> { ColumnKeys.Sha1, ColumnKeys.Sha256 },
             LastDirectory = @"C:\Tools",
         };
 
@@ -47,6 +55,10 @@ public class SettingsServiceTests
         Assert.Equal(ScanMode.HashOnly, loaded.ScanMode);
         Assert.Equal(RevocationMode.Online, loaded.RevocationMode);
         Assert.False(loaded.AutoSortAfterScan);
+        Assert.Equal(AppLanguage.English, loaded.Language);
+        Assert.Equal(ExportFormat.Json, loaded.ExportFormat);
+        Assert.Equal(ExportContentScope.All, loaded.ExportContent);
+        Assert.Equal(new[] { ColumnKeys.Sha1, ColumnKeys.Sha256 }, loaded.HiddenColumns);
         Assert.Equal(@"C:\Tools", loaded.LastDirectory);
 
         var json = File.ReadAllText(service.SettingsPath);
@@ -64,8 +76,26 @@ public class SettingsServiceTests
 
         var settings = service.Load();
 
-        Assert.Equal(ThemeMode.Light, settings.Theme);
+        Assert.Equal(ThemeMode.Auto, settings.Theme);
         Assert.True(settings.Recursive);
+        Assert.Empty(settings.HiddenColumns);
+    }
+
+    [Fact]
+    public void LoadsFileWithUtf8Bom()
+    {
+        using var directory = new TempDirectory();
+        var service = new SettingsService(directory.Path);
+        Directory.CreateDirectory(directory.Path);
+        File.WriteAllText(
+            service.SettingsPath,
+            "{\"Theme\":\"Dark\",\"Language\":\"English\"}",
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        var settings = service.Load();
+
+        Assert.Equal(ThemeMode.Dark, settings.Theme);
+        Assert.Equal(AppLanguage.English, settings.Language);
     }
 
     [Fact]
