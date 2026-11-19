@@ -1,0 +1,72 @@
+<Window x:Class="Sigwalk.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:Sigwalk.Converters"
+        Title="扫描设置"
+        Width="560"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+  <Window.Resources>
+    <conv:NotEmptyToVisibilityConverter x:Key="NotEmptyToVisibility" />
+  </Window.Resources>
+
+  <StackPanel Margin="18">
+    <TextBlock Text="扫描设置" Style="{StaticResource SectionTitleStyle}" />
+
+    <CheckBox Content="递归扫描子目录" IsChecked="{Binding Recursive}" Margin="0,0,0,10" />
+
+    <TextBlock Text="扫描的文件类型（分号分隔，留空表示全部文件）"
+               Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4" />
+    <TextBox Text="{Binding Extensions, UpdateSourceTrigger=PropertyChanged}"
+             Margin="0,0,0,12" />
+
+    <TextBlock Text="并发数（1-32）"
+               Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4" />
+    <TextBox Text="{Binding MaxConcurrencyText, UpdateSourceTrigger=PropertyChanged}"
+             Width="100" HorizontalAlignment="Left" Margin="0,0,0,12" />
+
+    <TextBlock Text="扫描模式"
+               Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4" />
+    <ComboBox ItemsSource="{Binding ScanModeOptions}"
+              DisplayMemberPath="Display"
+              SelectedItem="{Binding SelectedScanMode}"
+              Margin="0,0,0,12" />
+
+    <TextBlock Text="证书吊销检查"
+               Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4" />
+    <ComboBox ItemsSource="{Binding RevocationOptions}"
+              DisplayMemberPath="Display"
+              SelectedItem="{Binding SelectedRevocation}"
+              Margin="0,0,0,4" />
+    <TextBlock Text="默认不联网检查吊销；在线模式可能明显变慢。"
+               Foreground="{DynamicResource MutedForegroundBrush}"
+               FontSize="12"
+               Margin="0,0,0,12" />
+
+    <TextBlock Text="主题"
+               Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4" />
+    <ComboBox ItemsSource="{Binding ThemeOptions}"
+              DisplayMemberPath="Display"
+              SelectedItem="{Binding SelectedTheme}"
+              Margin="0,0,0,12" />
+
+    <CheckBox Content="扫描完成后按签名状态自动排序"
+              IsChecked="{Binding AutoSortAfterScan}"
+              Margin="0,0,0,8" />
+
+    <TextBlock Text="{Binding ValidationMessage}"
+               Foreground="{DynamicResource ErrorBrush}"
+               TextWrapping="Wrap"
+               Margin="0,4,0,0"
+               Visibility="{Binding ValidationMessage, Converter={StaticResource NotEmptyToVisibility}}" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Content="取消" IsCancel="True" Click="Cancel_Click" />
+      <Button Content="确定" IsDefault="True" Style="{StaticResource AccentButtonStyle}"
+              Click="Ok_Click" Margin="0" />
+    </StackPanel>
+  </StackPanel>
+</Window>
