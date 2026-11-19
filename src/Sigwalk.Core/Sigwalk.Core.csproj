@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Sigwalk.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 仅用于获取 SignedCms / Rfc3161TimestampToken（WindowsDesktop 共享框架已包含，无需额外 NuGet） -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
+</Project>
