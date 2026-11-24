@@ -161,6 +161,8 @@
                 Background="{DynamicResource BorderBrush}" />
         <Button Content="{Binding ScanActionText}" Command="{Binding ScanActionCommand}"
                 Style="{StaticResource AccentButtonStyle}" MinWidth="96" />
+        <Button Content="{loc:Tr Menu.Scan.Rescan}" Command="{Binding RescanSelectedCommand}" />
+        <Button Content="{loc:Tr Menu.File.ClearList}" Command="{Binding ClearListCommand}" />
         <Border Width="1" Height="20" Margin="4,0,10,0" VerticalAlignment="Center"
                 Background="{DynamicResource BorderBrush}" />
         <Button Content="{loc:Tr Toolbar.Export}" Command="{Binding ExportCommand}" />

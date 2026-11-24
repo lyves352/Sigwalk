@@ -9,6 +9,8 @@
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
     <Setter Property="FontFamily" Value="Microsoft YaHei UI, Segoe UI" />
     <Setter Property="FontSize" Value="13" />
+    <!-- 根相对 pack URI：所有窗口（含 ShowInTaskbar=False 的设置/详情窗口）统一使用应用图标。 -->
+    <Setter Property="Icon" Value="pack://application:,,,/Assets/app.ico" />
   </Style>
 
   <!--

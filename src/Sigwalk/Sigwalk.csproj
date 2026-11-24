@@ -7,10 +7,16 @@
     <AssemblyName>Sigwalk</AssemblyName>
     <RootNamespace>Sigwalk</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\icons\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sigwalk.Core\Sigwalk.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 同时嵌入为 WPF 资源，供窗口 Icon 使用；Link 决定 pack URI 逻辑路径（assets/app.ico）。 -->
+  <ItemGroup>
+    <Resource Include="..\..\icons\app.ico" Link="Assets\app.ico" />
   </ItemGroup>
 
 </Project>
